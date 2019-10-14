@@ -5,9 +5,7 @@ The goal of this project is to better understand TLS 1.3 by creating a pure pyth
 ## TLS 1.3 HTTP Get Request
 First thing's first we want to find a server that will be able to answer a TLS 1.3 HTTP Get request.
 
-Using https://www.cdn77.com/tls-test we tested www.cloudflare.com for TLS 1.3 support and it looks like it supports TLS 1.3. 
-
-We want to be able to test the curl server so we will need a curl clinet for this we will need to compile curl from source because on mac os it doesn't come pre compiled to support TLS 1.3. See this site for how to compile curl on mac os https://curl.haxx.se/mail/lib-2002-01/0019.html
+Using https://www.cdn77.com/tls-test we tested www.cloudflare.com for TLS 1.3 support and it looks like it supports TLS 1.3.
 
 A site that will be super helpful during our development is [TLS 1.3 illustrated](https://tls13.ulfheim.net/)
 
