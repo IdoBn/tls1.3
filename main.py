@@ -1,11 +1,10 @@
 from socket import socket
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
 from cryptography.hazmat.primitives import serialization
-from typing import Tuple
 from dataclasses import dataclass
-import secrets
-import struct
 from client_hello import ClientHello
+from server_hello import ServerHello
+
 
 @dataclass
 class KeyPair:
@@ -44,7 +43,9 @@ def main():
     with socket() as s:
         s.connect((host, port))
         s.send(ch.serialize())
-        print(s.recv(4096))
+        sh = ServerHello.deserialize(s.recv(4096))
+        print(hex(sh.cipher_suite))
+        print(sh.extensions[0].public_key_bytes)
 
 
 if __name__ == "__main__":

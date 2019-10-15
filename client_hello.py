@@ -63,12 +63,22 @@ class ExtensionSignatureAlgorithms(ClientHelloExtension):
 
 class ExtensionKeyShare(ClientHelloExtension):
     def __init__(self, public_key_bytes: bytes):
+        self.public_key_bytes = public_key_bytes
         data = b"".join([
             struct.pack(">h", 0x001d),
             struct.pack(">h", len(public_key_bytes)),
             public_key_bytes
         ])
         super().__init__(EXTENSION_KEY_SHARE, data)
+
+    @classmethod
+    def deserialize(klass, data):
+        _assigned_value, = struct.unpack(">h", data[:2])
+        _data_follows, = struct.unpack(">h", data[2:4])
+        _x25519_assigned_value, = struct.unpack(">h", data[4:6])
+        public_key_length, = struct.unpack(">h", data[6:8])
+        public_key_bytes = data[8:8+public_key_length]
+        return ExtensionKeyShare(public_key_bytes)
 
 
 class ExtensionPSKKeyExchangeModes(ClientHelloExtension):
@@ -87,17 +97,34 @@ class ExtensionPSKKeyExchangeModes(ClientHelloExtension):
 
 class ExtensionSupportedVersions(ClientHelloExtension):
     def __init__(self):
-        pass
+        self.size = 4
+        self.data = 0x0304
 
     def serialize(self) -> bytes:
         data = b"".join([
             struct.pack(">h", EXTENSION_SUPPORTED_VERSIONS),
             struct.pack(">h", 0x03),
             struct.pack("b", 0x02),
-            struct.pack(">h", 0x0304),
+            struct.pack(">h", self.data),
         ])
         return data
 
+    @classmethod
+    def deserialize(klass, data: bytes):
+        _assigned_value, = struct.unpack(">h", data[:2])
+        _data_follows, = struct.unpack(">h", data[2:4])
+        _assigned_version, = struct.unpack(">h", data[4:6])
+        return ExtensionSupportedVersions()
+
+
+EXTENSIONS_MAP = {
+    EXTENSION_SERVER_NAME: ExtensionServerName,
+    EXTENSION_SUPPORTED_GROUPS: ExtensionSupportedGroups,
+    EXTENSION_SIGNATURE_ALGORITHMS: ExtensionSignatureAlgorithms,
+    EXTENSION_KEY_SHARE: ExtensionKeyShare,
+    EXTENSION_PSK_KEY_EXCHANGE_MODES: ExtensionPSKKeyExchangeModes,
+    EXTENSION_SUPPORTED_VERSIONS: ExtensionSupportedVersions,
+}
 
 class ClientHello:
     def __init__(self, domain: bytes, public_key_bytes: bytes):
