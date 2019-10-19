@@ -9,6 +9,7 @@ def test_RecordHeader():
     assert rh.size == 0x7a
     assert rh.rtype == 0x16
     assert rh.legacy_proto_version == 0x0303
+    assert rh.serialize() == bytes.fromhex("160303007a")
 
 def test_HandshakeHeader():
     hh = HandshakeHeader.deserialize(bytes.fromhex("02000076"))
