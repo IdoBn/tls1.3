@@ -8,6 +8,7 @@ from client_hello import ClientHello
 from server_hello import ServerHello
 import hashlib
 from crypto import KeyPair
+from binascii import hexlify
 
 
 def main():
@@ -17,13 +18,22 @@ def main():
     key_pair = KeyPair.generate()
     ch = ClientHello(host, key_pair.public)
 
+    hello_hash_bytes = bytearray()
     with socket() as s:
         # syn syn+ack ack
         s.connect((host, port))
         # send client hello
-        s.send(ch.serialize())
+        ch_bytes = ch.serialize()
+        s.send(ch_bytes)
+        hello_hash_bytes += ch_bytes[5:]
         # receive and deserialize server hello
-        sh = ServerHello.deserialize(s.recv(4096))
+        sh_bytes = s.recv(4096)
+        sh, bytes_read = ServerHello.deserialize(sh_bytes)
+        print("bytes_read", bytes_read)
+        hello_hash_bytes += sh_bytes[5:bytes_read]
+
+        # Server change cipher suite
+        
 
         # calculating shared secret
         print(hex(sh.cipher_suite))
@@ -31,6 +41,8 @@ def main():
         shared_secret = key_pair.exchange(peer_pub_key)
         print(shared_secret)
 
+        hello_hash = hashlib.sha256(hello_hash_bytes).digest()
+        print([hexlify(i) for i in key_pair.derive(shared_secret, hello_hash)])
 
 if __name__ == "__main__":
     main()

@@ -55,6 +55,7 @@ class ServerHello:
 
     @classmethod
     def deserialize(klass, data: bytes):
+        # TODO: convert this to a io.BytesIO this will make it so we don't need to handle the bytes_read variable
         bytes_read = 0
         rh = RecordHeader.deserialize(data[:RecordHeader.required_bytes()])
         bytes_read += RecordHeader.required_bytes()
@@ -90,7 +91,7 @@ class ServerHello:
                             server_random=server_random, 
                             session_id=session_id,
                             cipher_suite=cipher_suite,
-                            extensions=extensions)
+                            extensions=extensions), bytes_read
 
         
             
