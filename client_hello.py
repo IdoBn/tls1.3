@@ -73,11 +73,11 @@ class ExtensionKeyShare(ClientHelloExtension):
 
     @classmethod
     def deserialize(klass, data):
-        _assigned_value, = struct.unpack(">h", data[:2])
-        _data_follows, = struct.unpack(">h", data[2:4])
-        _x25519_assigned_value, = struct.unpack(">h", data[4:6])
-        public_key_length, = struct.unpack(">h", data[6:8])
-        public_key_bytes = data[8:8+public_key_length]
+        _assigned_value, = struct.unpack(">h", data.read(2))
+        _data_follows, = struct.unpack(">h", data.read(2))
+        _x25519_assigned_value, = struct.unpack(">h", data.read(2))
+        public_key_length, = struct.unpack(">h", data.read(2))
+        public_key_bytes = data.read(public_key_length)
         return ExtensionKeyShare(public_key_bytes)
 
 
@@ -110,10 +110,10 @@ class ExtensionSupportedVersions(ClientHelloExtension):
         return data
 
     @classmethod
-    def deserialize(klass, data: bytes):
-        _assigned_value, = struct.unpack(">h", data[:2])
-        _data_follows, = struct.unpack(">h", data[2:4])
-        _assigned_version, = struct.unpack(">h", data[4:6])
+    def deserialize(klass, data):
+        _assigned_value, = struct.unpack(">h", data.read(2))
+        _data_follows, = struct.unpack(">h", data.read(2))
+        _assigned_version, = struct.unpack(">h", data.read(2))
         return ExtensionSupportedVersions()
 
 

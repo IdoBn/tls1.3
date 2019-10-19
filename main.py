@@ -6,9 +6,11 @@ from cryptography.hazmat.primitives.kdf.hkdf import HKDF, HKDFExpand
 from dataclasses import dataclass
 from client_hello import ClientHello
 from server_hello import ServerHello
+from server_change_cipher_suite import ServerChangeCipherSuite
 import hashlib
 from crypto import KeyPair
 from binascii import hexlify
+from io import BytesIO, BufferedReader
 
 
 def main():
@@ -27,13 +29,13 @@ def main():
         s.send(ch_bytes)
         hello_hash_bytes += ch_bytes[5:]
         # receive and deserialize server hello
-        sh_bytes = s.recv(4096)
-        sh, bytes_read = ServerHello.deserialize(sh_bytes)
-        print("bytes_read", bytes_read)
-        hello_hash_bytes += sh_bytes[5:bytes_read]
-
+        orig_bytes_buffer = s.recv(4096)
+        bytes_buffer = BufferedReader(BytesIO(orig_bytes_buffer))
+        sh = ServerHello.deserialize(bytes_buffer)
+        hello_hash_bytes += orig_bytes_buffer[5:sh.record_header.size+5]
+    
         # Server change cipher suite
-        
+        sccs = ServerChangeCipherSuite.deserialize(bytes_buffer)
 
         # calculating shared secret
         print(hex(sh.cipher_suite))
