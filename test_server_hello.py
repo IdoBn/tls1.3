@@ -1,4 +1,6 @@
 from server_hello import RecordHeader, HandshakeHeader, ServerHello
+from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey, X25519PublicKey
+from unittest import mock
 
 
 def test_RecordHeader():
@@ -6,7 +8,6 @@ def test_RecordHeader():
     assert rh.size == 0x7a
     assert rh.rtype == 0x16
     assert rh.legacy_proto_version == 0x0303
-
 
 def test_HandshakeHeader():
     hh = HandshakeHeader.deserialize(bytes.fromhex("02000076"))

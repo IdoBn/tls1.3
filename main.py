@@ -1,31 +1,13 @@
 from socket import socket
-from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
-from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey, X25519PublicKey
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import serialization, hashes
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF, HKDFExpand
 from dataclasses import dataclass
 from client_hello import ClientHello
 from server_hello import ServerHello
-
-
-@dataclass
-class KeyPair:
-    public: bytes
-    private: bytes
-
-    @classmethod
-    def generate(klass):
-        private_key = X25519PrivateKey.generate()
-        private_bytes = private_key.private_bytes(
-            encoding=serialization.Encoding.Raw,
-            format=serialization.PrivateFormat.Raw,
-            encryption_algorithm=serialization.NoEncryption()
-        )
-
-        public_bytes = private_key.public_key().public_bytes(
-            encoding=serialization.Encoding.Raw,
-            format=serialization.PublicFormat.Raw
-        )
-
-        return KeyPair(public_bytes, private_bytes)
+import hashlib
+from crypto import KeyPair
 
 
 def main():
@@ -33,19 +15,21 @@ def main():
     port = 443
 
     key_pair = KeyPair.generate()
-    public_bytes, _private_bytes = key_pair.public, key_pair.private
-    # print(f"public_bytes {len(public_bytes)} {public_bytes}")
-    # print(f"private_bytes {len(private_bytes)} {private_bytes}")
-
-    ch = ClientHello(host, public_bytes)
-    # print(ch.serialize())
+    ch = ClientHello(host, key_pair.public)
 
     with socket() as s:
+        # syn syn+ack ack
         s.connect((host, port))
+        # send client hello
         s.send(ch.serialize())
+        # receive and deserialize server hello
         sh = ServerHello.deserialize(s.recv(4096))
+
+        # calculating shared secret
         print(hex(sh.cipher_suite))
-        print(sh.extensions[0].public_key_bytes)
+        peer_pub_key = sh.extensions[0].public_key_bytes
+        shared_secret = key_pair.exchange(peer_pub_key)
+        print(shared_secret)
 
 
 if __name__ == "__main__":

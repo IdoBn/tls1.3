@@ -128,9 +128,11 @@ EXTENSIONS_MAP = {
 
 class ClientHello:
     def __init__(self, domain: bytes, public_key_bytes: bytes):
+        # TODO: refactor this to be RecordType
         self.record_type = 0x16
         self.protocol_version = 0x0301
         self.record_size = 0#0x00ca #0 # None
+        # TODO: refactor this to be HandshakeHeader
         self.handshake_header = 0x01
         self.handshake_header_size = 0#0x00c6 #0 # None
         self.client_version = 0x0303
