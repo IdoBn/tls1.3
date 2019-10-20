@@ -12,3 +12,11 @@ class Wrapper:
         rh = RecordHeader.deserialize(byte_stream.read(5))
         payload = bytearray(byte_stream.read(rh.size))
         return Wrapper(rh, payload)
+
+    @property
+    def auth_tag(self) -> bytes:
+        return self.payload[-16:]
+
+    @property
+    def encrypted_data(self) -> bytes:
+        return self.payload[:-16]  

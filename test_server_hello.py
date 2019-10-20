@@ -1,4 +1,5 @@
-from server_hello import RecordHeader, HandshakeHeader, ServerHello
+from server_hello import RecordHeader, ServerHello
+from handshake_headers import HandshakeHeader
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey, X25519PublicKey
 from unittest import mock
 from io import BufferedReader, BytesIO

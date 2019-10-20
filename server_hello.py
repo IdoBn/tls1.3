@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from client_hello import EXTENSIONS_MAP, ClientHelloExtension
 from typing import List
 from io import BufferedReader
+from handshake_headers import HandshakeHeader
 
 @dataclass
 class RecordHeader:
@@ -22,19 +23,6 @@ class RecordHeader:
             struct.pack(">h", self.legacy_proto_version),
             struct.pack(">h", self.size),
         ])
-    
-
-@dataclass
-class HandshakeHeader:
-    message_type: int
-    size: int
-
-    @classmethod
-    def deserialize(klass, data: bytes):
-        message_type = data[0]
-        size, = struct.unpack(">h", data[2:])
-        return HandshakeHeader(message_type, size)
-
 
 class ServerHello:
     def __init__(self, 
