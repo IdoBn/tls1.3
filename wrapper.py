@@ -13,6 +13,12 @@ class Wrapper:
         payload = bytearray(byte_stream.read(rh.size))
         return Wrapper(rh, payload)
 
+    def serialize(self):
+        return b"".join([
+            self.record_header.serialize(),
+            self.payload
+        ])
+
     @property
     def auth_tag(self) -> bytes:
         return self.payload[-16:]

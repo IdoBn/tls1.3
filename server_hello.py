@@ -8,14 +8,17 @@ from handshake_headers import HandshakeHeader
 @dataclass
 class RecordHeader:
     rtype: int
-    legacy_proto_version: int
     size: int
+    legacy_proto_version: int = 0x0303
 
     @classmethod
     def deserialize(klass, data: bytes):
         record_type = data[0]
         legacy_proto_version, size = struct.unpack(">2h", data[1:])
-        return RecordHeader(record_type, legacy_proto_version, size)
+        return RecordHeader(
+            rtype=record_type, 
+            legacy_proto_version=legacy_proto_version, 
+            size=size)
 
     def serialize(self) -> bytes:
         return b"".join([

@@ -3,7 +3,7 @@ from io import BytesIO
 from dataclasses import dataclass
 
 @dataclass
-class ServerChangeCipherSuite:
+class ChangeCipherSuite:
     record_header: RecordHeader
     payload: bytes
 
@@ -11,4 +11,10 @@ class ServerChangeCipherSuite:
     def deserialize(klass, byte_stream: BytesIO):
         rh = RecordHeader.deserialize(byte_stream.read(5))
         payload = byte_stream.read(rh.size)
-        return ServerChangeCipherSuite(rh, payload)
+        return klass(rh, payload)
+
+    def serialize(self):
+        return b"".join([
+            self.record_header.serialize(),
+            self.payload
+        ])

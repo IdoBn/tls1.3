@@ -6,7 +6,7 @@ from dataclasses import dataclass
 import hashlib
 import struct
 
-def HKDF_Expand_Label(key, label, context, length, backend, algorithm):
+def HKDF_Expand_Label(key, label, context, length, backend=default_backend(), algorithm=hashes.SHA256()):
     tmp_label = b"tls13 " + label.encode()
     hkdf_label = struct.pack(">h", length) + struct.pack("b", len(tmp_label)) + tmp_label + struct.pack("b", len(context)) + context
     return HKDFExpand(
@@ -15,6 +15,23 @@ def HKDF_Expand_Label(key, label, context, length, backend, algorithm):
         info=hkdf_label, 
         backend=backend
     ).derive(key)
+
+@dataclass
+class ApplicationKeys:
+    client_key: bytes
+    client_iv: bytes
+    server_key: bytes
+    server_iv: bytes
+
+@dataclass
+class HandshakeKeys:
+    client_key: bytes
+    client_iv: bytes
+    client_handshake_traffic_secret: bytes
+    server_key: bytes
+    server_iv: bytes
+    server_handshake_traffic_secret: bytes
+    handshake_secret: bytes
 
 @dataclass
 class KeyPair:
@@ -116,7 +133,14 @@ class KeyPair:
             key=server_handshake_traffic_secret
         )
 
-        return client_handshake_key, client_handshake_iv, server_handshake_key, server_handshake_iv
+        return HandshakeKeys(
+                client_key=client_handshake_key, 
+                client_iv=client_handshake_iv,
+                client_handshake_traffic_secret=client_handshake_traffic_secret,
+                server_key=server_handshake_key, 
+                server_iv=server_handshake_iv,
+                server_handshake_traffic_secret=server_handshake_traffic_secret,
+                handshake_secret=handshake_secret)
         
     def derive_application_keys(self, handshake_secret: bytes, handshake_hash: bytes):
         empty_hash = hashlib.sha256(b"").digest()
@@ -178,9 +202,11 @@ class KeyPair:
             context = b"",
             length = 12)
 
-        return client_application_key, client_application_iv, server_application_key, server_application_iv
-
-
+        return ApplicationKeys(
+                client_key=client_application_key, 
+                client_iv=client_application_iv, 
+                server_key=server_application_key, 
+                server_iv=server_application_iv)
 
     @classmethod
     def generate(klass):
