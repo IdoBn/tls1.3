@@ -24,3 +24,11 @@ def test_KeyPair_derive():
     assert client_handshake_iv == bytes.fromhex("71abc2cae4c699d47c600268")
     assert server_handshake_key == bytes.fromhex("844780a7acad9f980fa25c114e43402a")
     assert server_handshake_iv == bytes.fromhex("4c042ddc120a38d1417fc815")
+
+def test_KeyPair_derive_application_keys():
+    handshake_secret = bytes.fromhex("fb9fc80689b3a5d02c33243bf69a1b1b20705588a794304a6e7120155edf149a")
+    handshake_hash = bytes.fromhex("22844b930e5e0a59a09d5ac35fc032fc91163b193874a265236e568077378d8b")
+
+    key_pair = get_mocked_keypair()
+    client_application_key, client_application_iv, server_application_key, server_application_iv = key_pair.derive_application_keys(handshake_secret, handshake_hash)
+    assert client_application_key == bytes.fromhex("49134b95328f279f0183860589ac6707")

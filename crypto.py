@@ -118,6 +118,69 @@ class KeyPair:
 
         return client_handshake_key, client_handshake_iv, server_handshake_key, server_handshake_iv
         
+    def derive_application_keys(self, handshake_secret: bytes, handshake_hash: bytes):
+        empty_hash = hashlib.sha256(b"").digest()
+        backend = default_backend()
+        derived_secret = HKDF_Expand_Label(
+            algorithm=hashes.SHA256(),
+            backend=backend,
+            key = handshake_secret,
+            label = "derived",
+            context = empty_hash,
+            length = 32)
+        master_secret = HKDF(
+            info=b"\x00",
+            salt=derived_secret,
+            length=32,
+            algorithm=hashes.SHA256(),
+            backend=backend
+        )._extract(b"\x00" * 32)
+        client_application_traffic_secret = HKDF_Expand_Label(
+            algorithm=hashes.SHA256(),
+            backend=backend,
+            key = master_secret,
+            label = "c ap traffic",
+            context = handshake_hash,
+            length = 32)
+        server_application_traffic_secret = HKDF_Expand_Label(
+            algorithm=hashes.SHA256(),
+            backend=backend,
+            key = master_secret,
+            label = "s ap traffic",
+            context = handshake_hash,
+            length = 32)
+        client_application_key = HKDF_Expand_Label(
+            algorithm=hashes.SHA256(),
+            backend=backend,
+            key = client_application_traffic_secret,
+            label = "key",
+            context = b"",
+            length = 16)
+        server_application_key = HKDF_Expand_Label(
+            algorithm=hashes.SHA256(),
+            backend=backend,
+            key = server_application_traffic_secret,
+            label = "key",
+            context = b"",
+            length = 16)
+        client_application_iv = HKDF_Expand_Label(
+            algorithm=hashes.SHA256(),
+            backend=backend,
+            key = client_application_traffic_secret,
+            label = "iv",
+            context = b"",
+            length = 12)
+        server_application_iv = HKDF_Expand_Label(
+            algorithm=hashes.SHA256(),
+            backend=backend,
+            key = server_application_traffic_secret,
+            label = "iv",
+            context = b"",
+            length = 12)
+
+        return client_application_key, client_application_iv, server_application_key, server_application_iv
+
+
 
     @classmethod
     def generate(klass):
