@@ -9,13 +9,12 @@ from handshake_headers import HandshakeHeader, HANDSHAKE_HEADER_TYPES, Handshake
 from change_cipher_suite import ChangeCipherSuite
 from wrapper import Wrapper
 import hashlib
-from crypto import KeyPair
+from crypto import KeyPair, xor_iv
 from binascii import hexlify
 from io import BytesIO, BufferedReader
 from Crypto.Cipher import AES
+import struct
 
-def xor_last_8_bytes(iv):
-    return iv[:4] + bytes([b ^ 1 for b in iv[4:]])
 
 def main():
     host = b"cloudflare.com"
@@ -155,9 +154,7 @@ def main():
         ciphertext = wrapper.encrypted_data
 
         old_iv = application_keys.server_iv
-        new_iv = bytearray(application_keys.server_iv)
-        # TODO: make this way!!! more generic!!!
-        new_iv[-1] ^= 1
+        new_iv = xor_iv(application_keys.server_iv, 1)
         print(f"old_iv={old_iv}, new_iv={new_iv}")
         decryptor = AES.new(application_keys.server_key, AES.MODE_GCM, new_iv)
         decryptor.update(recdata)

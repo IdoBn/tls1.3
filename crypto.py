@@ -6,6 +6,10 @@ from dataclasses import dataclass
 import hashlib
 import struct
 
+def xor_iv(iv, num):
+    formatted_num = (b"\x00"*4)+struct.pack(">q", num)
+    return bytes([i ^ j for i, j in zip(iv, formatted_num)])
+
 def HKDF_Expand_Label(key, label, context, length, backend=default_backend(), algorithm=hashes.SHA256()):
     tmp_label = b"tls13 " + label.encode()
     hkdf_label = struct.pack(">h", length) + struct.pack("b", len(tmp_label)) + tmp_label + struct.pack("b", len(context)) + context
