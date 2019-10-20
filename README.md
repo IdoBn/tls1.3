@@ -11,6 +11,7 @@ A site that will be super helpful during our development is [TLS 1.3 illustrated
 
 
 ## Goals
- 1. Send an HTTP GET request to a TLS 1.3 server.
- 2. Once we have a client that can send a HTTP Get Request we will want to create a server.
- 3. Once we've created a client and a server we may want to look into creating an HTTP proxy that supports TLS 1.3
+ - [x] Send an HTTP GET request to a TLS 1.3 server.
+ - [ ] Clean up code a bunch!!!
+ - [ ] Once we have a client that can send a HTTP Get Request we will want to create a server.
+ - [ ] Once we've created a client and a server we may want to look into creating an HTTP proxy that supports TLS 1.3
