@@ -1,5 +1,7 @@
 import struct
 import secrets
+from record_header import RecordHeader
+from handshake_headers import HandshakeHeader
 
 EXTENSION_SERVER_NAME = 0x00
 EXTENSION_SUPPORTED_GROUPS = 0x0a
@@ -128,13 +130,14 @@ EXTENSIONS_MAP = {
 
 class ClientHello:
     def __init__(self, domain: bytes, public_key_bytes: bytes):
-        # TODO: refactor this to be RecordType
-        self.record_type = 0x16
-        self.protocol_version = 0x0301
-        self.record_size = 0#0x00ca #0 # None
-        # TODO: refactor this to be HandshakeHeader
-        self.handshake_header = 0x01
-        self.handshake_header_size = 0#0x00c6 #0 # None
+        self.record_header = RecordHeader(
+            rtype=0x16, 
+            legacy_proto_version=0x0301, size=0
+        )
+        self.handshake_header = HandshakeHeader(
+            message_type=0x01, 
+            size=0
+        )
         self.client_version = 0x0303
         self.client_random = secrets.token_bytes(32)
         self.session_id = secrets.token_bytes(32)
@@ -159,17 +162,13 @@ class ClientHello:
 
     def calc_record_size(self) -> int:
         data = self._serialize()
-        self.record_size = len(data) - 5
-        self.handshake_header_size = self.record_size - 4
+        self.record_header.size = len(data) - 5
+        self.handshake_header.size = self.record_header.size - 4
 
     def _serialize(self) -> bytes:
         return b"".join([
-            struct.pack("b", self.record_type),
-            struct.pack(">h", self.protocol_version),
-            struct.pack(">h", self.record_size),
-            struct.pack("b", self.handshake_header),
-            struct.pack("b", 0),
-            struct.pack(">h", self.handshake_header_size),
+            self.record_header.serialize(),
+            self.handshake_header.serialize(),
             struct.pack(">h", self.client_version),
             struct.pack("32s", self.client_random),
             struct.pack("b32s", len(self.session_id), self.session_id),
