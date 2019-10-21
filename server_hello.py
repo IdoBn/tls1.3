@@ -6,15 +6,18 @@ from io import BufferedReader
 from handshake_headers import HandshakeHeader
 from record_header import RecordHeader
 
+
 class ServerHello:
-    def __init__(self, 
-                rh: RecordHeader, 
-                hh: HandshakeHeader, 
-                server_version: int, 
-                server_random: bytes,
-                session_id: bytes,
-                cipher_suite: int,
-                extensions: List[ClientHelloExtension]):
+    def __init__(
+        self,
+        rh: RecordHeader,
+        hh: HandshakeHeader,
+        server_version: int,
+        server_random: bytes,
+        session_id: bytes,
+        cipher_suite: int,
+        extensions: List[ClientHelloExtension],
+    ):
         self.record_header = rh
         self.handshake_header = hh
         self.server_version = server_version
@@ -34,7 +37,7 @@ class ServerHello:
         cipher_suite, = struct.unpack(">h", byte_stream.read(2))
         _compression_mode = byte_stream.read(1)
         extensions_length, = struct.unpack(">h", byte_stream.read(2))
-        
+
         extensions = []
         while extensions_length > 0:
             assigned_value, = struct.unpack(">h", byte_stream.peek()[:2])
@@ -43,14 +46,12 @@ class ServerHello:
             extensions.append(res)
             extensions_length -= res.size + 2
 
-        return ServerHello(rh=rh, 
-                            hh=hh, 
-                            server_version=server_version, 
-                            server_random=server_random, 
-                            session_id=session_id,
-                            cipher_suite=cipher_suite,
-                            extensions=extensions)
-
-        
-            
-
+        return ServerHello(
+            rh=rh,
+            hh=hh,
+            server_version=server_version,
+            server_random=server_random,
+            session_id=session_id,
+            cipher_suite=cipher_suite,
+            extensions=extensions,
+        )

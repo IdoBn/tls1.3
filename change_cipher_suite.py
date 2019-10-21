@@ -2,6 +2,7 @@ from server_hello import RecordHeader
 from io import BytesIO
 from dataclasses import dataclass
 
+
 @dataclass
 class ChangeCipherSuite:
     record_header: RecordHeader
@@ -14,7 +15,4 @@ class ChangeCipherSuite:
         return klass(rh, payload)
 
     def serialize(self):
-        return b"".join([
-            self.record_header.serialize(),
-            self.payload
-        ])
+        return b"".join([self.record_header.serialize(), self.payload])

@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from server_hello import RecordHeader
 from io import BytesIO
 
+
 @dataclass
 class Wrapper:
     record_header: RecordHeader
@@ -14,10 +15,7 @@ class Wrapper:
         return Wrapper(rh, payload)
 
     def serialize(self):
-        return b"".join([
-            self.record_header.serialize(),
-            self.payload
-        ])
+        return b"".join([self.record_header.serialize(), self.payload])
 
     @property
     def auth_tag(self) -> bytes:
@@ -25,4 +23,4 @@ class Wrapper:
 
     @property
     def encrypted_data(self) -> bytes:
-        return self.payload[:-16]  
+        return self.payload[:-16]
