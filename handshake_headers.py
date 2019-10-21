@@ -102,10 +102,42 @@ class HandshakeFinishedHandshakePayload(HandshakePayload):
 
     # TODO: there maybe some more checks we want to do with the verify data as well...
 
+@dataclass
+class NewSessionTicketHandshakePayload(HandshakePayload):
+    ticket_lifetime_seconds: int
+    ticket_age_add: int
+    ticket_nonce: int
+    session_ticket: bytes
+
+
+    @classmethod
+    def default_htype(klass) -> int:
+        return 0x04
+
+    @classmethod
+    def deserialize(klass, data: bytes):
+        bytes_buffer = BytesIO(data)
+        ticket_lifetime_seconds, = struct.unpack(">I", bytes_buffer.read(4))
+        ticket_age_add, = struct.unpack(">I", bytes_buffer.read(4))
+        ticket_nonce, = struct.unpack(">h", bytes_buffer.read(2))
+        session_ticket_length, = struct.unpack(">h", bytes_buffer.read(2))
+        session_ticket = bytes_buffer.read(session_ticket_length)
+        extension_data_length, = struct.unpack(">h", bytes_buffer.read(2))
+        _extension_data = bytes_buffer.read(extension_data_length)
+        
+        return NewSessionTicketHandshakePayload(
+            data=data,
+            ticket_lifetime_seconds=ticket_lifetime_seconds,
+            ticket_age_add=ticket_age_add,
+            ticket_nonce=ticket_nonce,
+            session_ticket=session_ticket
+        )
+
 
 HANDSHAKE_HEADER_TYPES = {
     EncryptedExtensionHandshakePayload.default_htype(): EncryptedExtensionHandshakePayload,
     CertificateHandshakePayload.default_htype(): CertificateHandshakePayload,
     CertificateVerifyHandshakePayload.default_htype(): CertificateVerifyHandshakePayload,
     HandshakeFinishedHandshakePayload.default_htype(): HandshakeFinishedHandshakePayload,
+    NewSessionTicketHandshakePayload.default_htype(): NewSessionTicketHandshakePayload,
 }

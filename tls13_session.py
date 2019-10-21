@@ -15,6 +15,7 @@ from handshake_headers import (
     HandshakeHeader,
     HANDSHAKE_HEADER_TYPES,
     HandshakeFinishedHandshakePayload,
+    NewSessionTicketHandshakePayload,
 )
 from change_cipher_suite import ChangeCipherSuite
 from wrapper import Wrapper
@@ -35,6 +36,7 @@ class TLS13Session:
         self.hello_hash_bytes = bytearray()
         self.application_send_counter = 0
         self.application_recv_counter = 0
+        self.session_tickets = []
 
     def connect(self) -> None:
         self.socket.connect((self.host, self.port))
@@ -187,6 +189,17 @@ class TLS13Session:
         bytes_buffer = BufferedReader(BytesIO(self.socket.recv(4096)))
         res = self._recv(bytes_buffer)
         while res[-1] != 0x17:
+            if res[-1] == 0x16:
+                plaintext_buffer = BufferedReader(BytesIO(res[:-1]))
+                while plaintext_buffer.peek():
+                    hh = HandshakeHeader.deserialize(plaintext_buffer.read(4))
+                    hh_payload_buffer = plaintext_buffer.read(hh.size)
+                    hh_payload = HANDSHAKE_HEADER_TYPES[hh.message_type].deserialize(
+                        hh_payload_buffer
+                    )
+                    if type(hh_payload) is NewSessionTicketHandshakePayload:
+                        self.session_tickets.append(hh_payload)
+
             res = self._recv(bytes_buffer)
 
         return res[:-1]
