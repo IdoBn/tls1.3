@@ -199,13 +199,11 @@ class TLS13Session:
 
     def _recv(self, bytes_buffer):
         # print("_recv", bytes_buffer.peek())
-        if len(bytes_buffer.peek()) < 4:
-            bytes_buffer = BufferedReader(
-                BytesIO(bytes_buffer.read() + self.socket.recv(4096))
-            )
-            # raise Exception("Need more data!!!")
+        # raise Exception("Need more data!!!")
+
         wrapper = Wrapper.deserialize(bytes_buffer)
         while wrapper.record_header.size > len(wrapper.payload):
+            # print("Wrapper read", wrapper.record_header.size - len(wrapper.payload))
             wrapper.payload += self.socket.recv(
                 wrapper.record_header.size - len(wrapper.payload)
             )
@@ -231,8 +229,17 @@ class TLS13Session:
 
     def recv(self):
         bytes_buffer = BufferedReader(BytesIO(self.socket.recv(4096)))
+
+        if len(bytes_buffer.peek()) < 4:
+            bytes_buffer = BufferedReader(
+                BytesIO(bytes_buffer.read() + self.socket.recv(4096))
+            )
         res = self._recv(bytes_buffer)
-        while res[-1] != 0x17:
+        # while res[-1] != 0x17:
+        # count =1
+        while True:
+            if res[-1] == 0x17:
+                yield res[:-1]
             if res[-1] == 0x16:
                 plaintext_buffer = BufferedReader(BytesIO(res[:-1]))
                 while plaintext_buffer.peek():
@@ -247,9 +254,16 @@ class TLS13Session:
                     if type(hh_payload) is NewSessionTicketHandshakePayload:
                         self.session_tickets.append(hh_payload)
 
+            if len(bytes_buffer.peek()) < 4:
+                bytes_buffer = BufferedReader(
+                    BytesIO(bytes_buffer.read() + self.socket.recv(4096))
+                )
             res = self._recv(bytes_buffer)
+            # print("iter", count)
+            # count += 1
+            # print(res[:-1].decode())
 
-        return res[:-1]
+        # return res[:-1]
 
     def close(self):
         self.socket.close()

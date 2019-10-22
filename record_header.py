@@ -11,7 +11,7 @@ class RecordHeader:
     @classmethod
     def deserialize(klass, data: bytes):
         record_type = data[0]
-        legacy_proto_version, size = struct.unpack(">2h", data[1:])
+        legacy_proto_version, size = struct.unpack(">2H", data[1:])
         return RecordHeader(
             rtype=record_type, legacy_proto_version=legacy_proto_version, size=size
         )
@@ -20,7 +20,7 @@ class RecordHeader:
         return b"".join(
             [
                 struct.pack("b", self.rtype),
-                struct.pack(">h", self.legacy_proto_version),
-                struct.pack(">h", self.size),
+                struct.pack(">H", self.legacy_proto_version),
+                struct.pack(">H", self.size),
             ]
         )
