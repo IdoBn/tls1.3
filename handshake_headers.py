@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 import struct
-from io import BytesIO
+from io import BytesIO, BufferedReader
 from crypto import HKDF_Expand_Label
 import hmac
 import hashlib
@@ -102,6 +102,7 @@ class HandshakeFinishedHandshakePayload(HandshakePayload):
 
     # TODO: there maybe some more checks we want to do with the verify data as well...
 
+
 @dataclass
 class NewSessionTicketHandshakePayload(HandshakePayload):
     ticket_lifetime_seconds: int
@@ -109,28 +110,33 @@ class NewSessionTicketHandshakePayload(HandshakePayload):
     ticket_nonce: int
     session_ticket: bytes
 
-
     @classmethod
     def default_htype(klass) -> int:
         return 0x04
 
     @classmethod
     def deserialize(klass, data: bytes):
-        bytes_buffer = BytesIO(data)
+        bytes_buffer = BufferedReader(BytesIO(data))
         ticket_lifetime_seconds, = struct.unpack(">I", bytes_buffer.read(4))
         ticket_age_add, = struct.unpack(">I", bytes_buffer.read(4))
-        ticket_nonce, = struct.unpack(">h", bytes_buffer.read(2))
-        session_ticket_length, = struct.unpack(">h", bytes_buffer.read(2))
+        bytes_of_nonce_value_followed, = struct.unpack("b", bytes_buffer.read(1))
+        ticket_nonce = bytes_buffer.read(
+            bytes_of_nonce_value_followed
+        )  # , = #struct.unpack(">H", bytes_buffer.read(2))
+        session_ticket_length, = struct.unpack(">H", bytes_buffer.read(2))
         session_ticket = bytes_buffer.read(session_ticket_length)
-        extension_data_length, = struct.unpack(">h", bytes_buffer.read(2))
-        _extension_data = bytes_buffer.read(extension_data_length)
-        
+        if len(session_ticket) < session_ticket_length:
+            raise Exception("Need more data!", session_ticket_length)
+        if len(bytes_buffer.peek()) > 2:
+            extension_data_length, = struct.unpack(">h", bytes_buffer.read(2))
+            _extension_data = bytes_buffer.read(extension_data_length)
+
         return NewSessionTicketHandshakePayload(
             data=data,
             ticket_lifetime_seconds=ticket_lifetime_seconds,
             ticket_age_add=ticket_age_add,
             ticket_nonce=ticket_nonce,
-            session_ticket=session_ticket
+            session_ticket=session_ticket,
         )
 
 

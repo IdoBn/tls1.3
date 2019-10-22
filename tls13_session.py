@@ -30,10 +30,13 @@ import struct
 class TLS13Session:
     def __init__(self, host, port):
         self.socket = socket()
+        # self.socket.setblocking()
         self.key_pair = KeyPair.generate()
         self.host = host
         self.port = port
         self.hello_hash_bytes = bytearray()
+        self.handshake_send_counter = 0
+        self.handshake_recv_counter = 0
         self.application_send_counter = 0
         self.application_recv_counter = 0
         self.session_tickets = []
@@ -86,36 +89,71 @@ class TLS13Session:
         return self.key_pair.derive(shared_secret, hello_hash)
 
     def recv_server_encrypted_extensions(self, bytes_buffer) -> bytes:
-        wrapper = Wrapper.deserialize(bytes_buffer)
-        while wrapper.record_header.size > len(wrapper.payload):
-            wrapper.payload += self.socket.recv(
-                wrapper.record_header.size - len(wrapper.payload)
+        def parse_wrapper(bytes_buffer):
+            wrapper = Wrapper.deserialize(bytes_buffer)
+            while wrapper.record_header.size > len(wrapper.payload):
+                wrapper.payload += self.socket.recv(
+                    wrapper.record_header.size - len(wrapper.payload)
+                )
+
+            recdata = wrapper.record_header.serialize()
+            authtag = wrapper.auth_tag
+
+            ciphertext = wrapper.encrypted_data
+
+            decryptor = AES.new(
+                self.handshake_keys.server_key,
+                AES.MODE_GCM,
+                xor_iv(self.handshake_keys.server_iv, self.handshake_recv_counter),
             )
+            decryptor.update(recdata)
 
-        recdata = wrapper.record_header.serialize()
-        authtag = wrapper.auth_tag
+            plaintext = decryptor.decrypt(bytes(ciphertext))
+            self.handshake_recv_counter += 1
 
-        ciphertext = wrapper.encrypted_data
+            decryptor.verify(authtag)
+            return plaintext[:-1]
 
-        decryptor = AES.new(
-            self.handshake_keys.server_key, AES.MODE_GCM, self.handshake_keys.server_iv
-        )
-        decryptor.update(recdata)
-
-        plaintext = decryptor.decrypt(bytes(ciphertext))
-
-        decryptor.verify(authtag)
-
-        plaintext_buffer = BytesIO(plaintext)
+        plaintext = bytearray()
+        plaintext += parse_wrapper(bytes_buffer)
+        plaintext_buffer = BufferedReader(BytesIO(plaintext))
         # TODO: change this to walrus operator
-        while plaintext_buffer.tell() < len(plaintext) - 1:
+        while True:
+            # print("difference 1", plaintext_buffer.tell() < len(plaintext))
             hh = HandshakeHeader.deserialize(plaintext_buffer.read(4))
+            # print("hh", hh)
             hh_payload_buffer = plaintext_buffer.read(hh.size)
+            while len(hh_payload_buffer) < hh.size:
+                res = parse_wrapper(bytes_buffer)
+                plaintext += res
+                plaintext_buffer = BufferedReader(
+                    BytesIO(plaintext_buffer.peek() + res)
+                )
+
+                prev_len = len(hh_payload_buffer)
+                hh_payload_buffer = hh_payload_buffer + plaintext_buffer.read(
+                    hh.size - prev_len
+                )
+
+            #     # print("difference", hh.size - len(hh_payload_buffer))
+            #     new_bytes = parse_wrapper(bytes_buffer)
+            #     index = plaintext_buffer.tell()
+            #     plaintext_buffer.seek(0, 2)
+            #     plaintext_buffer.write(new_bytes)
+            #     plaintext_buffer.seek(index)
+            #     hh_payload_buffer = hh_payload_buffer + plaintext_buffer.read(hh.size - len(hh_payload_buffer))
+            # print("updated plaintext_buffer!!!")
+            # print(bytes(plaintext_buffer.getbuffer()))
+            # raise Exception("We need more data!!!")
             hh_payload = HANDSHAKE_HEADER_TYPES[hh.message_type].deserialize(
                 hh_payload_buffer
             )
+            # print("hh_payload", len(hh_payload.data), hh, type(hh_payload))
+            if type(hh_payload) is HandshakeFinishedHandshakePayload:
+                break
 
-        return plaintext[:-1]
+        # print("done!!")
+        return plaintext
 
     def send_handshake_finished(
         self, handshake_keys: HandshakeKeys, handshake_hash: bytes
@@ -160,6 +198,12 @@ class TLS13Session:
         self.application_send_counter += 1
 
     def _recv(self, bytes_buffer):
+        # print("_recv", bytes_buffer.peek())
+        if len(bytes_buffer.peek()) < 4:
+            bytes_buffer = BufferedReader(
+                BytesIO(bytes_buffer.read() + self.socket.recv(4096))
+            )
+            # raise Exception("Need more data!!!")
         wrapper = Wrapper.deserialize(bytes_buffer)
         while wrapper.record_header.size > len(wrapper.payload):
             wrapper.payload += self.socket.recv(
@@ -194,9 +238,12 @@ class TLS13Session:
                 while plaintext_buffer.peek():
                     hh = HandshakeHeader.deserialize(plaintext_buffer.read(4))
                     hh_payload_buffer = plaintext_buffer.read(hh.size)
+                    # print("recv", len(hh_payload_buffer), hh.size, hh)
+                    # print(res[:-1])
                     hh_payload = HANDSHAKE_HEADER_TYPES[hh.message_type].deserialize(
                         hh_payload_buffer
                     )
+                    # print(hh_payload)
                     if type(hh_payload) is NewSessionTicketHandshakePayload:
                         self.session_tickets.append(hh_payload)
 
