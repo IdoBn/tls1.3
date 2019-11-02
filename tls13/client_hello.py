@@ -1,7 +1,7 @@
 import struct
 import secrets
-from record_header import RecordHeader
-from handshake_headers import HandshakeHeader
+from tls13.record_header import RecordHeader
+from tls13.handshake_headers import HandshakeHeader
 
 EXTENSION_SERVER_NAME = 0x00
 EXTENSION_SUPPORTED_GROUPS = 0x0A

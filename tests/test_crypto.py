@@ -3,7 +3,7 @@ from cryptography.hazmat.primitives.asymmetric.x25519 import (
     X25519PublicKey,
 )
 from unittest import mock
-from crypto import KeyPair
+from tls13.crypto import KeyPair
 
 
 def get_mocked_keypair() -> KeyPair:

@@ -1,10 +1,10 @@
 import struct
 from dataclasses import dataclass
-from client_hello import EXTENSIONS_MAP, ClientHelloExtension
+from tls13.client_hello import EXTENSIONS_MAP, ClientHelloExtension
 from typing import List
 from io import BufferedReader
-from handshake_headers import HandshakeHeader
-from record_header import RecordHeader
+from tls13.handshake_headers import HandshakeHeader
+from tls13.record_header import RecordHeader
 
 
 class ServerHello:

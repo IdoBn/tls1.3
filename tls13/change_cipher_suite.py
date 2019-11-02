@@ -1,4 +1,4 @@
-from server_hello import RecordHeader
+from tls13.server_hello import RecordHeader
 from io import BytesIO
 from dataclasses import dataclass
 

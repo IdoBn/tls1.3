@@ -9,18 +9,18 @@ data = s.recv(4096)
 s.close()
 """
 from socket import socket, timeout
-from client_hello import ClientHello, ExtensionKeyShare
-from server_hello import ServerHello, RecordHeader
-from handshake_headers import (
+from tls13.client_hello import ClientHello, ExtensionKeyShare
+from tls13.server_hello import ServerHello, RecordHeader
+from tls13.handshake_headers import (
     HandshakeHeader,
     HANDSHAKE_HEADER_TYPES,
     HandshakeFinishedHandshakePayload,
     NewSessionTicketHandshakePayload,
 )
-from change_cipher_suite import ChangeCipherSuite
-from wrapper import Wrapper
+from tls13.change_cipher_suite import ChangeCipherSuite
+from tls13.wrapper import Wrapper
 import hashlib
-from crypto import KeyPair, xor_iv, HandshakeKeys
+from tls13.crypto import KeyPair, xor_iv, HandshakeKeys
 from binascii import hexlify
 from io import BytesIO, BufferedReader
 from Crypto.Cipher import AES

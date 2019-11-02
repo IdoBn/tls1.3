@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 import struct
 from io import BytesIO, BufferedReader
-from crypto import HKDF_Expand_Label
+from tls13.crypto import HKDF_Expand_Label
 import hmac
 import hashlib
 
