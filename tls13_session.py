@@ -8,7 +8,7 @@ data = s.recv(4096)
 
 s.close()
 """
-from socket import socket
+from socket import socket, timeout
 from client_hello import ClientHello, ExtensionKeyShare
 from server_hello import ServerHello, RecordHeader
 from handshake_headers import (
@@ -28,9 +28,9 @@ import struct
 
 
 class TLS13Session:
-    def __init__(self, host, port):
+    def __init__(self, host, port, timeout=5.0):
         self.socket = socket()
-        # self.socket.setblocking()
+        self.socket.settimeout(timeout)
         self.key_pair = KeyPair.generate()
         self.host = host
         self.port = port
@@ -197,7 +197,7 @@ class TLS13Session:
         self.socket.send(w.serialize())
         self.application_send_counter += 1
 
-    def _recv(self, bytes_buffer):
+    def __recv(self, bytes_buffer):
         # print("_recv", bytes_buffer.peek())
         # raise Exception("Need more data!!!")
 
@@ -227,14 +227,14 @@ class TLS13Session:
 
         return plaintext
 
-    def recv(self):
+    def _recv(self):
         bytes_buffer = BufferedReader(BytesIO(self.socket.recv(4096)))
 
         if len(bytes_buffer.peek()) < 4:
             bytes_buffer = BufferedReader(
                 BytesIO(bytes_buffer.read() + self.socket.recv(4096))
             )
-        res = self._recv(bytes_buffer)
+        res = self.__recv(bytes_buffer)
         # while res[-1] != 0x17:
         # count =1
         while True:
@@ -258,12 +258,17 @@ class TLS13Session:
                 bytes_buffer = BufferedReader(
                     BytesIO(bytes_buffer.read() + self.socket.recv(4096))
                 )
-            res = self._recv(bytes_buffer)
-            # print("iter", count)
-            # count += 1
-            # print(res[:-1].decode())
+            res = self.__recv(bytes_buffer)
 
-        # return res[:-1]
+    def recv(self):
+        res = bytearray()
+        try:
+            for data in self._recv():
+                res += data
+        except timeout:
+            pass
+
+        return res
 
     def close(self):
         self.socket.close()
