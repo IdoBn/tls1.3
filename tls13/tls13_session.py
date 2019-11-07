@@ -9,7 +9,7 @@ data = s.recv(4096)
 s.close()
 """
 from socket import socket, timeout
-from tls13.client_hello import ClientHello, ExtensionKeyShare
+from tls13.client_hello import ClientHello, ExtensionKeyShare, ExtensionPreSharedKey, ExtensionEarlyData
 from tls13.server_hello import ServerHello, RecordHeader
 from tls13.handshake_headers import (
     HandshakeHeader,
@@ -25,6 +25,8 @@ from binascii import hexlify
 from io import BytesIO, BufferedReader
 from Crypto.Cipher import AES
 import struct
+from tls13.crypto import HKDF_Expand_Label
+import hmac
 
 
 class TLS13Session:
@@ -70,6 +72,69 @@ class TLS13Session:
 
         # Client Handshake Finished
         self.send_handshake_finished(self.handshake_keys, handshake_hash)
+
+    def resume(self) -> None:
+        if self.application_keys is None:
+            raise Exception("Can't Resume TLS1.3 Session")
+
+        session_ticket = self.session_tickets[0]
+        
+        self.resumption_keys = self.key_pair.derive_early_keys(session_ticket.psk(self.application_keys.resumption_master_secret), b"")
+
+        finished_key = HKDF_Expand_Label(
+            key=self.resumption_keys.binder_key,
+            label="finished",
+            context=b"",
+            length=32,
+        )
+        verify_data = hmac.new(
+            finished_key, msg=b"", digestmod=hashlib.sha256
+        ).digest()
+        psk_binders = verify_data
+
+        pre_share_key_ext = ExtensionPreSharedKey(
+            identity=session_ticket.session_ticket, 
+            obfuscated_ticket_age=session_ticket.obfuscated_ticket_age, 
+            binders=psk_binders)
+        
+
+        ch = ClientHello(self.host, self.key_pair.public)
+        ch.add_extension(ExtensionEarlyData())
+        ch.add_extension(pre_share_key_ext)
+
+        ch_bytes = ch.serialize()
+        hello_hash = hashlib.sha256(ch_bytes[:-len(psk_binders)]).digest()
+
+        finished_key = HKDF_Expand_Label(
+            key=self.resumption_keys.binder_key,
+            label="finished",
+            context=b"",
+            length=32,
+        )
+        verify_data = hmac.new(
+            finished_key, msg=hello_hash, digestmod=hashlib.sha256
+        ).digest()
+        psk_binders = verify_data
+
+        self.resumption_keys = self.key_pair.derive_early_keys(session_ticket.psk(self.application_keys.resumption_master_secret), hello_hash)
+        pre_share_key_ext = ExtensionPreSharedKey(
+            identity=session_ticket.session_ticket, 
+            obfuscated_ticket_age=session_ticket.obfuscated_ticket_age, 
+            binders=psk_binders)
+
+        ch = ClientHello(self.host, self.key_pair.public)
+        ch.add_extension(ExtensionEarlyData())
+        ch.add_extension(pre_share_key_ext)
+
+        ch_bytes_final = ch.serialize()
+        # print(len(ch_bytes_final), ch_bytes_final)
+
+        self.socket = socket()
+        self.socket.connect((self.host, self.port))
+        self.socket.send(ch_bytes_final)
+        print("res", self.socket.recv(4096))
+
+
 
     def send_client_hello(self):
         ch = ClientHello(self.host, self.key_pair.public)
@@ -119,9 +184,15 @@ class TLS13Session:
         plaintext_buffer = BufferedReader(BytesIO(plaintext))
         # TODO: change this to walrus operator
         while True:
-            # print("difference 1", plaintext_buffer.tell() < len(plaintext))
+            if len(plaintext_buffer.peek()) < 4:
+                res = parse_wrapper(bytes_buffer)
+                plaintext += res
+                plaintext_buffer = BufferedReader(
+                    BytesIO(plaintext_buffer.peek() + res)
+                )
+
             hh = HandshakeHeader.deserialize(plaintext_buffer.read(4))
-            # print("hh", hh)
+        
             hh_payload_buffer = plaintext_buffer.read(hh.size)
             while len(hh_payload_buffer) < hh.size:
                 res = parse_wrapper(bytes_buffer)
@@ -135,24 +206,14 @@ class TLS13Session:
                     hh.size - prev_len
                 )
 
-            #     # print("difference", hh.size - len(hh_payload_buffer))
-            #     new_bytes = parse_wrapper(bytes_buffer)
-            #     index = plaintext_buffer.tell()
-            #     plaintext_buffer.seek(0, 2)
-            #     plaintext_buffer.write(new_bytes)
-            #     plaintext_buffer.seek(index)
-            #     hh_payload_buffer = hh_payload_buffer + plaintext_buffer.read(hh.size - len(hh_payload_buffer))
-            # print("updated plaintext_buffer!!!")
-            # print(bytes(plaintext_buffer.getbuffer()))
-            # raise Exception("We need more data!!!")
+            
             hh_payload = HANDSHAKE_HEADER_TYPES[hh.message_type].deserialize(
                 hh_payload_buffer
             )
-            # print("hh_payload", len(hh_payload.data), hh, type(hh_payload))
+    
             if type(hh_payload) is HandshakeFinishedHandshakePayload:
                 break
 
-        # print("done!!")
         return plaintext
 
     def send_handshake_finished(
@@ -198,12 +259,9 @@ class TLS13Session:
         self.application_send_counter += 1
 
     def __recv(self, bytes_buffer):
-        # print("_recv", bytes_buffer.peek())
-        # raise Exception("Need more data!!!")
 
         wrapper = Wrapper.deserialize(bytes_buffer)
         while wrapper.record_header.size > len(wrapper.payload):
-            # print("Wrapper read", wrapper.record_header.size - len(wrapper.payload))
             wrapper.payload += self.socket.recv(
                 wrapper.record_header.size - len(wrapper.payload)
             )
@@ -245,12 +303,9 @@ class TLS13Session:
                 while plaintext_buffer.peek():
                     hh = HandshakeHeader.deserialize(plaintext_buffer.read(4))
                     hh_payload_buffer = plaintext_buffer.read(hh.size)
-                    # print("recv", len(hh_payload_buffer), hh.size, hh)
-                    # print(res[:-1])
                     hh_payload = HANDSHAKE_HEADER_TYPES[hh.message_type].deserialize(
                         hh_payload_buffer
                     )
-                    # print(hh_payload)
                     if type(hh_payload) is NewSessionTicketHandshakePayload:
                         self.session_tickets.append(hh_payload)
 
@@ -258,6 +313,10 @@ class TLS13Session:
                 bytes_buffer = BufferedReader(
                     BytesIO(bytes_buffer.read() + self.socket.recv(4096))
                 )
+
+                if len(bytes_buffer.peek()) < 4:
+                    break
+
             res = self.__recv(bytes_buffer)
 
     def recv(self):

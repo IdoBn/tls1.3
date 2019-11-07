@@ -1,7 +1,10 @@
 import struct
 import secrets
 from tls13.record_header import RecordHeader
-from tls13.handshake_headers import HandshakeHeader
+from tls13.handshake_headers import HandshakeHeader, NewSessionTicketHandshakePayload
+import hmac
+import hashlib
+import binascii
 
 EXTENSION_SERVER_NAME = 0x00
 EXTENSION_SUPPORTED_GROUPS = 0x0A
@@ -9,6 +12,8 @@ EXTENSION_SIGNATURE_ALGORITHMS = 0x0D
 EXTENSION_KEY_SHARE = 0x33
 EXTENSION_PSK_KEY_EXCHANGE_MODES = 0x2D
 EXTENSION_SUPPORTED_VERSIONS = 0x2B
+EXTENSION_EARLY_DATA = 0x2A
+EXTENSION_PRE_SHARED_KEY = 0x29
 
 
 class ClientHelloExtension:
@@ -27,6 +32,108 @@ class ClientHelloExtension:
                 self.data,
             ]
         )
+
+
+class ExtensionEarlyData(ClientHelloExtension):
+    def __init__(self):
+        super().__init__(EXTENSION_EARLY_DATA, b"")
+
+    def serialize(self) -> bytes:
+        return b"\x00*\x00\x00"
+
+
+class ExtensionPreSharedKey(ClientHelloExtension):
+    # def __init__(self, session_ticket: bytes, obfuscated_ticket_age: int, binder_key: bytes, client_hello_hash: bytes):
+    #     # TODO: data
+    #     # session_ticket.session_ticket
+    #     # session_ticket.obfuscated_ticket_age
+    #     print("here", session_ticket, obfuscated_ticket_age, binder_key, client_hello_hash)
+
+    #     finished_key = HKDF_Expand_Label(
+    #         key=binder_key,
+    #         label="finished",
+    #         context=b"",
+    #         length=32,
+    #     )
+    #     verify_data = hmac.new(
+    #         finished_key, msg=client_hello_hash, digestmod=hashlib.sha256
+    #     ).digest()
+    #     psk_binders = verify_data
+        
+    #     psk_identity = b"".join(
+    #         [
+    #             struct.pack(">h", len(session_ticket)),
+    #             session_ticket,
+    #             struct.pack(">I", obfuscated_ticket_age),
+    #         ]
+    #     )
+
+    #     print("len(session_ticket)", len(session_ticket))
+    #     print("psk identity", binascii.hexlify(psk_identity))
+
+    #     # self.psk_binders_serialized = b""
+    #     self.psk_binders_serialized = b"".join([
+    #         struct.pack(">h", len(psk_binders) + 1),
+    #         struct.pack("b", len(psk_binders)),
+    #         psk_binders
+    #     ])
+
+    #     print("len(psk_identity)", len(psk_identity))
+    #     data = b"".join(
+    #         [
+    #             struct.pack(">h", len(psk_identity)),
+    #             psk_identity,
+    #             self.psk_binders_serialized   
+    #         ]
+    #     )
+
+    #     super().__init__(EXTENSION_PRE_SHARED_KEY, data)
+
+    def __init__(self, identity: bytes, obfuscated_ticket_age: int, binders: bytes):
+        data = ExtensionPreSharedKey.serialize_pre_shared_key_extension(
+            identity=identity,
+            obfuscated_ticket_age=obfuscated_ticket_age,
+            binders=binders
+        )
+
+        super().__init__(EXTENSION_PRE_SHARED_KEY, data)
+
+    def serialize(self) -> bytes:
+        return b"".join(
+            [
+                struct.pack(">h", self.assigned_value),
+                struct.pack(">h", len(self.data)),
+                self.data,
+            ]
+        )
+
+    @classmethod
+    def serialize_psk_identity(klass, identity: bytes, obfuscated_ticket_age: int) -> bytes:
+        return b"".join([
+            struct.pack(">h", len(identity)),
+            identity,
+            struct.pack(">I", obfuscated_ticket_age)
+        ])
+
+    @classmethod
+    def serialize_pre_shared_key_extension(klass, identity: bytes, obfuscated_ticket_age:int, binders: bytes) -> bytes:
+        identity = klass.serialize_psk_identity(
+            identity=identity,
+            obfuscated_ticket_age=obfuscated_ticket_age
+        )
+
+        binders_serialized = b"".join([
+            struct.pack("b", len(binders)),
+            binders
+        ])
+
+        return b"".join([
+            struct.pack(">h", len(identity)),
+            identity,
+            struct.pack(">h", len(binders_serialized)),
+            binders_serialized
+        ])
+
 
 
 class ExtensionServerName(ClientHelloExtension):
@@ -148,7 +255,7 @@ class ClientHello:
         # 13 03 - assigned value for TLS_CHACHA20_POLY1305_SHA256
         self.cipher_suites = bytes.fromhex("130113021303")
 
-        extensions = [
+        self.extensions = [
             ExtensionServerName(domain),
             ExtensionSupportedGroups(),
             ExtensionSignatureAlgorithms(),
@@ -157,8 +264,8 @@ class ClientHello:
             ExtensionSupportedVersions(),
         ]
 
-        self.extension_data = b"".join([ex.serialize() for ex in extensions])
-        self.extension_length = len(self.extension_data)
+    def add_extension(self, extension: ClientHelloExtension):
+        self.extensions.append(extension)
 
     def calc_record_size(self) -> int:
         data = self._serialize()
@@ -166,6 +273,8 @@ class ClientHello:
         self.handshake_header.size = self.record_header.size - 4
 
     def _serialize(self) -> bytes:
+        self.extension_data = b"".join([ex.serialize() for ex in self.extensions])
+        self.extension_length = len(self.extension_data)
         return b"".join(
             [
                 self.record_header.serialize(),

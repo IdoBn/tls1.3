@@ -4,6 +4,7 @@ from tls13.handshake_headers import (
     HandshakePayload,
     HANDSHAKE_HEADER_TYPES,
     HandshakeFinishedHandshakePayload,
+    NewSessionTicketHandshakePayload,
 )
 
 
@@ -34,6 +35,16 @@ def test_HandshakeFinishedHandshakePayload():
     assert hh_payload.verify_data == bytes.fromhex(
         "976017a77ae47f1658e28f7085fe37d149d1e9c91f56e1aebbe0c6bb054bd92b"
     )
+
+
+# def test_NewSessionTicketHandshakePayload():
+#     NewSessionTicketHandshakePayload(
+#         data=data,
+#         ticket_lifetime_seconds=300,
+#         ticket_age_add=ticket_age_add,
+#         ticket_nonce=ticket_nonce,
+#         session_ticket=session_ticket,
+#     )
 
 
 def test_handshake_header_serialize():

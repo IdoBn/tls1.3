@@ -114,6 +114,19 @@ class NewSessionTicketHandshakePayload(HandshakePayload):
     def default_htype(klass) -> int:
         return 0x04
 
+    @property
+    def obfuscated_ticket_age(self):
+        # see https://tools.ietf.org/html/rfc8446#section-4.2.11.1 for explanation
+        return ((self.ticket_lifetime_seconds * 1000) + self.ticket_age_add) % (2 ** 32)
+
+    def psk(self, resumption_master_secret: bytes):
+        return HKDF_Expand_Label(
+            key=resumption_master_secret,
+            label="resumption", 
+            context=self.ticket_nonce, 
+            length=32
+        )
+
     @classmethod
     def deserialize(klass, data: bytes):
         bytes_buffer = BufferedReader(BytesIO(data))

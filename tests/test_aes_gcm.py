@@ -15,6 +15,5 @@ def test_aes_gcm():
     decryptor.update(recdata)
 
     plaintext = decryptor.decrypt(ciphertext)
-    print(plaintext)
 
     decryptor.verify(authtag)

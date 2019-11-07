@@ -2,10 +2,13 @@ from tls13.tls13_session import TLS13Session
 
 
 def main():
-    host = b"www.google.com"
+    # host = b"www.google.com"
     # host = b"www.facebook.com"
     # host = b"cloudflare.com"
-    port = 443
+    # port = 443
+
+    host = b"host.docker.internal"
+    port = 4433
 
     sess = TLS13Session(host, port)
     sess.connect()
@@ -15,6 +18,9 @@ def main():
     res = sess.recv()
     print(res.decode())
     sess.close()
+    # print(sess.session_tickets)
+
+    sess.resume()
 
 
 if __name__ == "__main__":

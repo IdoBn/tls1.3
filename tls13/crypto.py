@@ -37,6 +37,7 @@ class ApplicationKeys:
     client_iv: bytes
     server_key: bytes
     server_iv: bytes
+    resumption_master_secret: bytes
 
 
 @dataclass
@@ -48,6 +49,12 @@ class HandshakeKeys:
     server_iv: bytes
     server_handshake_traffic_secret: bytes
     handshake_secret: bytes
+
+
+@dataclass
+class ResumptionKeys:
+    binder_key: bytes
+    early_secret: bytes
 
 
 @dataclass
@@ -75,15 +82,59 @@ class KeyPair:
         shared_key = self.private_key.exchange(peer_pub_key)
         return shared_key
 
-    def derive(self, shared_secret: bytes, hello_hash: bytes):
-        backend = default_backend()
+    def derive_early_keys(self, psk: bytes, client_hello_hash: bytes) -> ResumptionKeys:
+        backend=default_backend()
         early_secret = HKDF(
             algorithm=hashes.SHA256(),
             length=32,
             info=b"\x00",
             salt=b"\x00",
             backend=backend,
-        )._extract(b"\x00" * 32)
+        )._extract(psk)
+        empty_hash = hashlib.sha256(b"").digest()
+        binder_key = HKDF_Expand_Label(
+            key=early_secret,
+            algorithm=hashes.SHA256(),
+            length=32,
+            label="res binder",
+            context=empty_hash,
+            backend=backend,
+        )
+        client_early_traffic_secret = HKDF_Expand_Label(
+            key=early_secret,
+            algorithm=hashes.SHA256(),
+            length=32,
+            label="c e traffic",
+            context=client_hello_hash,
+            backend=backend,
+        )
+        early_exporter_master_secret = HKDF_Expand_Label(
+            key=early_secret,
+            algorithm=hashes.SHA256(),
+            length=32,
+            label="e exp master",
+            context=client_hello_hash,
+            backend=backend,
+        )
+        return ResumptionKeys(
+            binder_key=binder_key,
+            early_secret=early_secret,
+        )
+
+
+    def derive(self, shared_secret: bytes, hello_hash: bytes, resumption_keys: ResumptionKeys=None):
+        backend = default_backend()
+        if resumption_keys:
+            early_secret = resumption_keys.early_secret
+        else:
+            early_secret = HKDF(
+                algorithm=hashes.SHA256(),
+                length=32,
+                info=b"\x00",
+                salt=b"\x00",
+                backend=backend,
+            )._extract(b"\x00" * 32)
+        
         empty_hash = hashlib.sha256(b"").digest()
         derived_secret = HKDF_Expand_Label(
             key=early_secret,
@@ -193,6 +244,14 @@ class KeyPair:
             context=handshake_hash,
             length=32,
         )
+        resumption_master_secret = HKDF_Expand_Label(
+            algorithm=hashes.SHA256(),
+            backend=backend,
+            key=master_secret,
+            label="res master",
+            context=handshake_hash,
+            length=32,
+        )
         client_application_key = HKDF_Expand_Label(
             algorithm=hashes.SHA256(),
             backend=backend,
@@ -231,6 +290,7 @@ class KeyPair:
             client_iv=client_application_iv,
             server_key=server_application_key,
             server_iv=server_application_iv,
+            resumption_master_secret=resumption_master_secret
         )
 
     @classmethod
