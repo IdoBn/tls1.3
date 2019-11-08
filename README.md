@@ -14,10 +14,21 @@ Some resources that will be useful to us when learning about TLS 1.3
 We want a server that we can make TLS 1.3 requests to and also enable 0-RTT (because I couldn't find a server that supports this...)
 
 ### Helpful snippet
+Client:
+
 ```bash
 echo -e "GET / HTTP/1.1\r\nHost: $host\r\nConnection: close\r\n\r\n" > request.txt
 openssl s_client -connect host.docker.internal:4433 -tls1_3 -sess_out session.pem -ign_eof < request.txt
 openssl s_client -connect host.docker.internal:4433 -tls1_3 -sess_in session.pem -early_data request.txt
+```
+
+Server:
+```bash
+openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+    -keyout myPKey.pem \
+    -out myCert.crt \
+    -subj '/CN=US'
+openssl s_server -accept portNum -cert myCert.pem -key myPKey.pem
 ```
 
 ### Testing Container
@@ -31,6 +42,20 @@ docker build . -t nginxtls13:latest
 To run:
 ```bash
 docker run -p4433:443 -it nginxtls13
+```
+
+### Crazy Debugging
+When working on session resumption, there were some issues. To debug these issues I edited openssl (added some print statements) so that I could see what openssl was looking at and compare that to my code. This was some pretty hard debugging...
+
+You can see the diffs to openssl in ```resources/openssl.diff```
+
+The setup to make openssl compile is pretty simple. Just install it from git 
+```bash
+git clone <openssl>
+cd openssl
+# apply changes
+make install
+openssl s_server -accept portNum -cert myCert.pem -key myPKey.pem
 ```
 
 ## Goals

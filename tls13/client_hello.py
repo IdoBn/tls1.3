@@ -116,22 +116,28 @@ class ExtensionPreSharedKey(ClientHelloExtension):
         ])
 
     @classmethod
-    def serialize_pre_shared_key_extension(klass, identity: bytes, obfuscated_ticket_age:int, binders: bytes) -> bytes:
-        identity = klass.serialize_psk_identity(
-            identity=identity,
-            obfuscated_ticket_age=obfuscated_ticket_age
-        )
-
+    def serialize_binders(klass, binders: bytes) -> bytes:
         binders_serialized = b"".join([
             struct.pack("b", len(binders)),
             binders
         ])
 
         return b"".join([
-            struct.pack(">h", len(identity)),
-            identity,
             struct.pack(">h", len(binders_serialized)),
             binders_serialized
+        ])    
+
+    @classmethod
+    def serialize_pre_shared_key_extension(klass, identity: bytes, obfuscated_ticket_age:int, binders: bytes) -> bytes:
+        identity = klass.serialize_psk_identity(
+            identity=identity,
+            obfuscated_ticket_age=obfuscated_ticket_age
+        )
+
+        return b"".join([
+            struct.pack(">h", len(identity)),
+            identity,
+            klass.serialize_binders(binders)
         ])
 
 

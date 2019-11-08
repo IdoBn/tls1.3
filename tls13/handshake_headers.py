@@ -4,6 +4,7 @@ from io import BytesIO, BufferedReader
 from tls13.crypto import HKDF_Expand_Label
 import hmac
 import hashlib
+from binascii import hexlify
 
 
 @dataclass
@@ -120,12 +121,14 @@ class NewSessionTicketHandshakePayload(HandshakePayload):
         return ((self.ticket_lifetime_seconds * 1000) + self.ticket_age_add) % (2 ** 32)
 
     def psk(self, resumption_master_secret: bytes):
-        return HKDF_Expand_Label(
+        tmp_psk = HKDF_Expand_Label(
             key=resumption_master_secret,
             label="resumption", 
             context=self.ticket_nonce, 
             length=32
         )
+        print("psk", hexlify(tmp_psk))
+        return tmp_psk
 
     @classmethod
     def deserialize(klass, data: bytes):

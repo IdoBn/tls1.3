@@ -1,0 +1,189 @@
+diff --git a/ssl/statem/extensions.c b/ssl/statem/extensions.c
+index c529579019..c3a65c3edb 100644
+--- a/ssl/statem/extensions.c
++++ b/ssl/statem/extensions.c
+@@ -8,6 +8,7 @@
+  */
+ 
+ #include <string.h>
++#include <stdio.h>
+ #include "internal/nelem.h"
+ #include "internal/cryptlib.h"
+ #include "../ssl_local.h"
+@@ -1435,6 +1436,14 @@ static int init_psk_kex_modes(SSL *s, unsigned int context)
+     return 1;
+ }
+ 
++int print_hex(const unsigned char * buffer, size_t buffer_size) {
++    for (int i = 0; i < buffer_size; i ++) {
++        printf("%02x", buffer[i]);
++    }
++    printf("\n");
++    return 0;
++}
++
+ int tls_psk_do_binder(SSL *s, const EVP_MD *md, const unsigned char *msgstart,
+                       size_t binderoffset, const unsigned char *binderin,
+                       unsigned char *binderout, SSL_SESSION *sess, int sign,
+@@ -1472,6 +1481,8 @@ int tls_psk_do_binder(SSL *s, const EVP_MD *md, const unsigned char *msgstart,
+             && sess->ext.max_early_data > 0)
+         usepskfored = 1;
+ 
++    printf("external: %d\n", external);
++
+     if (external) {
+         label = external_label;
+         labelsize = sizeof(external_label) - 1;
+@@ -1488,10 +1499,13 @@ int tls_psk_do_binder(SSL *s, const EVP_MD *md, const unsigned char *msgstart,
+      * data. For client side external PSK not being used for early_data we
+      * generate it but store it away for later use.
+      */
+-    if (s->server || !external || usepskfored)
++    if (s->server || !external || usepskfored) {
++	printf("which early secret 1\n");
+         early_secret = (unsigned char *)s->early_secret;
+-    else
++    } else {
++	printf("which early secret 2\n");
+         early_secret = (unsigned char *)sess->early_secret;
++    }
+ 
+     if (!tls13_generate_secret(s, md, NULL, sess->master_key,
+                                sess->master_key_length, early_secret)) {
+@@ -1499,6 +1513,9 @@ int tls_psk_do_binder(SSL *s, const EVP_MD *md, const unsigned char *msgstart,
+         goto err;
+     }
+ 
++    printf("master_secret: ");
++    print_hex(sess->master_key, sess->master_key_length);
++
+     /*
+      * Create the handshake hash for the binder key...the messages so far are
+      * empty!
+@@ -1576,6 +1593,11 @@ int tls_psk_do_binder(SSL *s, const EVP_MD *md, const unsigned char *msgstart,
+         }
+     }
+ 
++    printf("msgstart: %d\n", msgstart);
++    printf("binderoffset: %d\n", binderoffset);
++    printf("message: ");
++    print_hex(msgstart, binderoffset);
++
+     if (EVP_DigestUpdate(mctx, msgstart, binderoffset) <= 0
+             || EVP_DigestFinal_ex(mctx, hash, NULL) <= 0) {
+         SSLfatal(s, SSL_AD_INTERNAL_ERROR, SSL_F_TLS_PSK_DO_BINDER,
+@@ -1604,14 +1626,25 @@ int tls_psk_do_binder(SSL *s, const EVP_MD *md, const unsigned char *msgstart,
+         goto err;
+     }
+ 
++    printf("hash: ");
++    print_hex(hash, hashsize);
++    printf("binderout: ");
++    print_hex(binderout, bindersize);
++
+     if (sign) {
+         ret = 1;
+     } else {
+         /* HMAC keys can't do EVP_DigestVerify* - use CRYPTO_memcmp instead */
+         ret = (CRYPTO_memcmp(binderin, binderout, hashsize) == 0);
+-        if (!ret)
++	printf("binderkey: ");
++        print_hex(binderkey, sizeof(binderkey));
++        printf("finishedkey: ");
++        print_hex(finishedkey, sizeof(finishedkey));
++        if (!ret) {
++	    printf("hello world\n");
+             SSLfatal(s, SSL_AD_ILLEGAL_PARAMETER, SSL_F_TLS_PSK_DO_BINDER,
+                      SSL_R_BINDER_DOES_NOT_VERIFY);
++	}
+     }
+ 
+  err:
+diff --git a/ssl/statem/statem_clnt.c b/ssl/statem/statem_clnt.c
+index 13610ba1b7..560e78cf51 100644
+--- a/ssl/statem/statem_clnt.c
++++ b/ssl/statem/statem_clnt.c
+@@ -2568,6 +2568,14 @@ MSG_PROCESS_RETURN tls_process_certificate_request(SSL *s, PACKET *pkt)
+     return MSG_PROCESS_CONTINUE_PROCESSING;
+ }
+ 
++/*int print_hex(const unsigned char * buffer, size_t buffer_size) {
++    for (int i = 0; i < buffer_size; i ++) {
++        printf("%02x", buffer[i]);
++    }
++    printf("\n");
++    return 0;
++}*/
++
+ MSG_PROCESS_RETURN tls_process_new_session_ticket(SSL *s, PACKET *pkt)
+ {
+     unsigned int ticklen;
+@@ -2723,6 +2731,7 @@ MSG_PROCESS_RETURN tls_process_new_session_ticket(SSL *s, PACKET *pkt)
+         }
+         hashlen = (size_t)hashleni;
+ 
++	
+         if (!tls13_hkdf_expand(s, md, s->resumption_master_secret,
+                                nonce_label,
+                                sizeof(nonce_label) - 1,
+@@ -2733,7 +2742,13 @@ MSG_PROCESS_RETURN tls_process_new_session_ticket(SSL *s, PACKET *pkt)
+             /* SSLfatal() already called */
+             goto err;
+         }
+-        s->session->master_key_length = hashlen;
++        printf("s->resumption_master_secret: ");
++	print_hex(s->resumption_master_secret, hashlen);
++	printf("s->session->master_key: ");
++	print_hex(s->session->master_key, hashlen);
++	
++
++	s->session->master_key_length = hashlen;
+ 
+         OPENSSL_free(exts);
+         ssl_update_cache(s, SSL_SESS_CACHE_CLIENT);
+diff --git a/ssl/statem/statem_srvr.c b/ssl/statem/statem_srvr.c
+index 5f709e5f99..dfca65ea0d 100644
+--- a/ssl/statem/statem_srvr.c
++++ b/ssl/statem/statem_srvr.c
+@@ -4095,6 +4095,13 @@ int tls_construct_new_session_ticket(SSL *s, WPACKET *pkt)
+             /* SSLfatal() already called */
+             goto err;
+         }
++	
++	printf("hello from different file\n");
++	printf("s->resumption_master_secret: ");
++	print_hex(s->resumption_master_secret, hashlen);
++	printf("s->session->master_key: ");
++	print_hex(s->session->master_key, hashlen);
++
+         s->session->master_key_length = hashlen;
+ 
+         s->session->time = (long)time(NULL);
+diff --git a/ssl/tls13_enc.c b/ssl/tls13_enc.c
+index 266b7dfd21..037bae4b09 100644
+--- a/ssl/tls13_enc.c
++++ b/ssl/tls13_enc.c
+@@ -168,6 +168,13 @@ int tls13_derive_finishedkey(SSL *s, const EVP_MD *md,
+                              sizeof(finishedlabel) - 1, NULL, 0, fin, finlen, 1);
+ }
+ 
++int print_hex2(const unsigned char * buffer, size_t buffer_size) {
++    for (int i = 0; i < buffer_size; i ++) {
++        printf("%02x", buffer[i]);
++    }
++    printf("\n");
++    return 0;
++}
+ /*
+  * Given the previous secret |prevsecret| and a new input secret |insecret| of
+  * length |insecretlen|, generate a new secret and store it in the location
+@@ -246,6 +253,9 @@ int tls13_generate_secret(SSL *s, const EVP_MD *md,
+             return 0;
+         }
+ 
++	printf("pre extract sec: ");
++	print_hex2(preextractsec, EVP_MAX_MD_SIZE);
++
+         prevsecret = preextractsec;
+         prevsecretlen = mdlen;
+     }

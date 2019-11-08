@@ -30,7 +30,7 @@ import hmac
 
 
 class TLS13Session:
-    def __init__(self, host, port, timeout=5.0):
+    def __init__(self, host, port, timeout=2.0):
         self.socket = socket()
         self.socket.settimeout(timeout)
         self.key_pair = KeyPair.generate()
@@ -61,8 +61,10 @@ class TLS13Session:
         # Server Encrypted Extensions
         plaintext = self.recv_server_encrypted_extensions(bytes_buffer)
 
+        self.hello_hash_bytes += plaintext
+
         # Calculate Application Keys
-        handshake_hash = hashlib.sha256(self.hello_hash_bytes + plaintext).digest()
+        handshake_hash = hashlib.sha256(self.hello_hash_bytes).digest()
         self.application_keys = self.key_pair.derive_application_keys(
             self.handshake_keys.handshake_secret, handshake_hash
         )
@@ -79,7 +81,11 @@ class TLS13Session:
 
         session_ticket = self.session_tickets[0]
         
-        self.resumption_keys = self.key_pair.derive_early_keys(session_ticket.psk(self.application_keys.resumption_master_secret), b"")
+        print("keys", self.application_keys)
+        resumption_master_secret = self.application_keys.resumption_master_secret(hashlib.sha256(self.hello_hash_bytes).digest())
+        print("resumption_master_secret", hexlify(resumption_master_secret))
+        self.resumption_keys = self.key_pair.derive_early_keys(session_ticket.psk(resumption_master_secret), b"")
+        print("binder_key", hexlify(self.resumption_keys.binder_key))
 
         finished_key = HKDF_Expand_Label(
             key=self.resumption_keys.binder_key,
@@ -91,19 +97,24 @@ class TLS13Session:
             finished_key, msg=b"", digestmod=hashlib.sha256
         ).digest()
         psk_binders = verify_data
+        print("finished_key", hexlify(finished_key))
+
+        offset = len(ExtensionPreSharedKey.serialize_binders(psk_binders))
 
         pre_share_key_ext = ExtensionPreSharedKey(
             identity=session_ticket.session_ticket, 
             obfuscated_ticket_age=session_ticket.obfuscated_ticket_age, 
             binders=psk_binders)
-        
 
         ch = ClientHello(self.host, self.key_pair.public)
         ch.add_extension(ExtensionEarlyData())
         ch.add_extension(pre_share_key_ext)
 
         ch_bytes = ch.serialize()
-        hello_hash = hashlib.sha256(ch_bytes[:-len(psk_binders)]).digest()
+        my_hello_hash = hashlib.sha256(ch_bytes[5:-offset]).digest()
+        print("my_hash", hexlify(my_hello_hash))
+        print("my_hash_offset", hexlify(ch_bytes[5:-offset]))
+
 
         finished_key = HKDF_Expand_Label(
             key=self.resumption_keys.binder_key,
@@ -112,18 +123,20 @@ class TLS13Session:
             length=32,
         )
         verify_data = hmac.new(
-            finished_key, msg=hello_hash, digestmod=hashlib.sha256
+            finished_key, msg=my_hello_hash, digestmod=hashlib.sha256
         ).digest()
+        print("finished_key", hexlify(finished_key))
         psk_binders = verify_data
+        
+        print("psk_binders", hexlify(psk_binders))
 
-        self.resumption_keys = self.key_pair.derive_early_keys(session_ticket.psk(self.application_keys.resumption_master_secret), hello_hash)
+        self.resumption_keys = self.key_pair.derive_early_keys(session_ticket.psk(resumption_master_secret), my_hello_hash)
         pre_share_key_ext = ExtensionPreSharedKey(
             identity=session_ticket.session_ticket, 
             obfuscated_ticket_age=session_ticket.obfuscated_ticket_age, 
             binders=psk_binders)
 
-        ch = ClientHello(self.host, self.key_pair.public)
-        ch.add_extension(ExtensionEarlyData())
+        ch.extensions = [ex for ex in ch.extensions if type(ex) is not ExtensionPreSharedKey]
         ch.add_extension(pre_share_key_ext)
 
         ch_bytes_final = ch.serialize()
@@ -150,6 +163,7 @@ class TLS13Session:
 
     def calc_handshake_keys(self, peer_pub_key: bytes) -> HandshakeKeys:
         shared_secret = self.key_pair.exchange(peer_pub_key)
+        print("shared secret", shared_secret)
         hello_hash = hashlib.sha256(self.hello_hash_bytes).digest()
         return self.key_pair.derive(shared_secret, hello_hash)
 
@@ -229,6 +243,8 @@ class TLS13Session:
         plaintext_payload = b"".join(
             [hh_header.serialize(), hh_payload.verify_data, b"\x16"]
         )
+
+        self.hello_hash_bytes += plaintext_payload[:-1]
 
         record_header = RecordHeader(rtype=0x17, size=len(plaintext_payload) + 16)
 
