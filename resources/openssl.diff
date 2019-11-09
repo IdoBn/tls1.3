@@ -1,5 +1,114 @@
+diff --git a/apps/s_server.c b/apps/s_server.c
+index 5fa7c2fb42..7f294d1cf5 100644
+--- a/apps/s_server.c
++++ b/apps/s_server.c
+@@ -9,6 +9,7 @@
+  * https://www.openssl.org/source/license.html
+  */
+ 
++#include <stdio.h>
+ #include <ctype.h>
+ #include <stdio.h>
+ #include <stdlib.h>
+@@ -2274,6 +2275,14 @@ static void print_stats(BIO *bio, SSL_CTX *ssl_ctx)
+                SSL_CTX_sess_get_cache_size(ssl_ctx));
+ }
+ 
++int print_hex3(const unsigned char * buffer, size_t buffer_size) {
++    for (int i = 0; i < buffer_size; i ++) {
++        printf("%02x", buffer[i]);
++    }
++    printf("\n");
++    return 0;
++}
++
+ static int sv_body(int s, int stype, int prot, unsigned char *context)
+ {
+     char *buf = NULL;
+@@ -2417,8 +2426,13 @@ static int sv_body(int s, int stype, int prot, unsigned char *context)
+         while (edret != SSL_READ_EARLY_DATA_FINISH) {
+             for (;;) {
+                 edret = SSL_read_early_data(con, buf, bufsize, &readbytes);
+-                if (edret != SSL_READ_EARLY_DATA_ERROR)
++                if (edret != SSL_READ_EARLY_DATA_ERROR) {
++		    printf("error reading early data SSL_READ_EARLY_DATA_ERROR %d\n", edret);
+                     break;
++		}
++		
++		printf("read early data: %d -> ", readbytes);
++		print_hex3(buf, readbytes);
+ 
+                 switch (SSL_get_error(con, 0)) {
+                 case SSL_ERROR_WANT_WRITE:
+@@ -2432,6 +2446,8 @@ static int sv_body(int s, int stype, int prot, unsigned char *context)
+                     goto err;
+                 }
+             }
++
++	    printf("again readbytes: %d, write_header: %d\n", readbytes, write_header);
+             if (readbytes > 0) {
+                 if (write_header) {
+                     BIO_printf(bio_s_out, "Early data received:\n");
+diff --git a/crypto/evp/digest.c b/crypto/evp/digest.c
+index 11c334cc5e..0337f90096 100644
+--- a/crypto/evp/digest.c
++++ b/crypto/evp/digest.c
+@@ -280,8 +280,19 @@ int EVP_DigestInit_ex(EVP_MD_CTX *ctx, const EVP_MD *type, ENGINE *impl)
+     return ctx->digest->init(ctx);
+ }
+ 
++int print_hex5(const unsigned char * buffer, size_t buffer_size) {
++    for (int i = 0; i < buffer_size; i ++) {
++        printf("%02x", buffer[i]);
++    }
++    printf("\n");
++    return 0;
++}
++
+ int EVP_DigestUpdate(EVP_MD_CTX *ctx, const void *data, size_t count)
+ {
++    //printf("EVP_DigestUpdate :");
++    //print_hex5(data, count);
++
+     if (count == 0)
+         return 1;
+ 
+diff --git a/ssl/ssl_lib.c b/ssl/ssl_lib.c
+index 74161b0cb7..cefaf87b3b 100644
+--- a/ssl/ssl_lib.c
++++ b/ssl/ssl_lib.c
+@@ -1888,9 +1888,12 @@ int SSL_read_early_data(SSL *s, void *buf, size_t num, size_t *readbytes)
+         /* fall through */
+ 
+     case SSL_EARLY_DATA_READ_RETRY:
++	printf("we are here: SSL_EARLY_DATA_READ_RETRY s->ext.early_data=%d\n", s->ext.early_data);
+         if (s->ext.early_data == SSL_EARLY_DATA_ACCEPTED) {
++	    printf("stepped into if SSL_EARLY_DATA_ACCEPTED\n");
+             s->early_data_state = SSL_EARLY_DATA_READING;
+             ret = SSL_read_ex(s, buf, num, readbytes);
++	    printf("ret %d, readbytes: %ln\n", ret, readbytes);
+             /*
+              * State machine will update early_data_state to
+              * SSL_EARLY_DATA_FINISHED_READING if we get an EndOfEarlyData
+@@ -1898,13 +1901,16 @@ int SSL_read_early_data(SSL *s, void *buf, size_t num, size_t *readbytes)
+              */
+             if (ret > 0 || (ret <= 0 && s->early_data_state
+                                         != SSL_EARLY_DATA_FINISHED_READING)) {
++		printf("stepped into inner if\n");
+                 s->early_data_state = SSL_EARLY_DATA_READ_RETRY;
+                 return ret > 0 ? SSL_READ_EARLY_DATA_SUCCESS
+                                : SSL_READ_EARLY_DATA_ERROR;
+             }
+         } else {
++	    printf("stepped into else\n");
+             s->early_data_state = SSL_EARLY_DATA_FINISHED_READING;
+         }
++	printf("making readbytes = 0\n");
+         *readbytes = 0;
+         return SSL_READ_EARLY_DATA_FINISH;
+ 
 diff --git a/ssl/statem/extensions.c b/ssl/statem/extensions.c
-index c529579019..c3a65c3edb 100644
+index c529579019..ba35f59dad 100644
 --- a/ssl/statem/extensions.c
 +++ b/ssl/statem/extensions.c
 @@ -8,6 +8,7 @@
@@ -10,7 +119,19 @@ index c529579019..c3a65c3edb 100644
  #include "internal/nelem.h"
  #include "internal/cryptlib.h"
  #include "../ssl_local.h"
-@@ -1435,6 +1436,14 @@ static int init_psk_kex_modes(SSL *s, unsigned int context)
+@@ -1112,8 +1113,10 @@ static int init_alpn(SSL *s, unsigned int context)
+ 
+ static int final_alpn(SSL *s, unsigned int context, int sent)
+ {
+-    if (!s->server && !sent && s->session->ext.alpn_selected != NULL)
++    if (!s->server && !sent && s->session->ext.alpn_selected != NULL) {
+             s->ext.early_data_ok = 0;
++	    printf("12) s->ext.early_data_ok = %d\n", s->ext.early_data_ok);
++    }
+ 
+     if (!s->server || !SSL_IS_TLS13(s))
+         return 1;
+@@ -1435,6 +1438,14 @@ static int init_psk_kex_modes(SSL *s, unsigned int context)
      return 1;
  }
  
@@ -25,7 +146,7 @@ index c529579019..c3a65c3edb 100644
  int tls_psk_do_binder(SSL *s, const EVP_MD *md, const unsigned char *msgstart,
                        size_t binderoffset, const unsigned char *binderin,
                        unsigned char *binderout, SSL_SESSION *sess, int sign,
-@@ -1472,6 +1481,8 @@ int tls_psk_do_binder(SSL *s, const EVP_MD *md, const unsigned char *msgstart,
+@@ -1472,6 +1483,8 @@ int tls_psk_do_binder(SSL *s, const EVP_MD *md, const unsigned char *msgstart,
              && sess->ext.max_early_data > 0)
          usepskfored = 1;
  
@@ -34,7 +155,7 @@ index c529579019..c3a65c3edb 100644
      if (external) {
          label = external_label;
          labelsize = sizeof(external_label) - 1;
-@@ -1488,10 +1499,13 @@ int tls_psk_do_binder(SSL *s, const EVP_MD *md, const unsigned char *msgstart,
+@@ -1488,10 +1501,13 @@ int tls_psk_do_binder(SSL *s, const EVP_MD *md, const unsigned char *msgstart,
       * data. For client side external PSK not being used for early_data we
       * generate it but store it away for later use.
       */
@@ -50,7 +171,7 @@ index c529579019..c3a65c3edb 100644
  
      if (!tls13_generate_secret(s, md, NULL, sess->master_key,
                                 sess->master_key_length, early_secret)) {
-@@ -1499,6 +1513,9 @@ int tls_psk_do_binder(SSL *s, const EVP_MD *md, const unsigned char *msgstart,
+@@ -1499,6 +1515,9 @@ int tls_psk_do_binder(SSL *s, const EVP_MD *md, const unsigned char *msgstart,
          goto err;
      }
  
@@ -60,7 +181,7 @@ index c529579019..c3a65c3edb 100644
      /*
       * Create the handshake hash for the binder key...the messages so far are
       * empty!
-@@ -1576,6 +1593,11 @@ int tls_psk_do_binder(SSL *s, const EVP_MD *md, const unsigned char *msgstart,
+@@ -1576,6 +1595,11 @@ int tls_psk_do_binder(SSL *s, const EVP_MD *md, const unsigned char *msgstart,
          }
      }
  
@@ -72,7 +193,7 @@ index c529579019..c3a65c3edb 100644
      if (EVP_DigestUpdate(mctx, msgstart, binderoffset) <= 0
              || EVP_DigestFinal_ex(mctx, hash, NULL) <= 0) {
          SSLfatal(s, SSL_AD_INTERNAL_ERROR, SSL_F_TLS_PSK_DO_BINDER,
-@@ -1604,14 +1626,25 @@ int tls_psk_do_binder(SSL *s, const EVP_MD *md, const unsigned char *msgstart,
+@@ -1604,14 +1628,25 @@ int tls_psk_do_binder(SSL *s, const EVP_MD *md, const unsigned char *msgstart,
          goto err;
      }
  
@@ -99,6 +220,158 @@ index c529579019..c3a65c3edb 100644
      }
  
   err:
+@@ -1625,6 +1660,7 @@ int tls_psk_do_binder(SSL *s, const EVP_MD *md, const unsigned char *msgstart,
+ 
+ static int final_early_data(SSL *s, unsigned int context, int sent)
+ {
++    printf("inside final_early_data\n");
+     if (!sent)
+         return 1;
+ 
+@@ -1653,8 +1689,18 @@ static int final_early_data(SSL *s, unsigned int context, int sent)
+             || (s->allow_early_data_cb != NULL
+                 && !s->allow_early_data_cb(s,
+                                          s->allow_early_data_cb_data))) {
++	    	printf("s->max_early_data = %d, s->hit = %d, s->early_data_state = %d, s->ext.early_data_ok = %d, s->hello_retry_request = %d, s->allow_early_data_cb = %d\n", 
++            s->max_early_data == 0, 
++            !s->hit, 
++            s->early_data_state != SSL_EARLY_DATA_ACCEPTING, 
++            !s->ext.early_data_ok, 
++            s->hello_retry_request != SSL_HRR_NONE, 
++            (s->allow_early_data_cb != NULL && !s->allow_early_data_cb(s,
++                                         s->allow_early_data_cb_data)));
++		printf("s->ext.early_data was set here 1!!!!\n");
+         s->ext.early_data = SSL_EARLY_DATA_REJECTED;
+     } else {
++	printf("setting SSL_EARLY_DATA_ACCEPTED!!! OF ext->early_data\n");
+         s->ext.early_data = SSL_EARLY_DATA_ACCEPTED;
+ 
+         if (!tls13_change_cipher_state(s,
+diff --git a/ssl/statem/extensions_clnt.c b/ssl/statem/extensions_clnt.c
+index 75fecdeaa6..8a9b45975d 100644
+--- a/ssl/statem/extensions_clnt.c
++++ b/ssl/statem/extensions_clnt.c
+@@ -929,6 +929,7 @@ EXT_RETURN tls_construct_ctos_early_data(SSL *s, WPACKET *pkt,
+      * We set this to rejected here. Later, if the server acknowledges the
+      * extension, we set it to accepted.
+      */
++    printf("s->ext.early_data was set here 2!!!!\n");
+     s->ext.early_data = SSL_EARLY_DATA_REJECTED;
+     s->ext.early_data_ok = 1;
+ 
+@@ -1689,6 +1690,7 @@ int tls_parse_stoc_alpn(SSL *s, PACKET *pkt, unsigned int context, X509 *x,
+                != 0) {
+         /* ALPN not consistent with the old session so cannot use early_data */
+         s->ext.early_data_ok = 0;
++	printf("444) s->ext.early_data_ok = %d\n", s->ext.early_data_ok);
+     }
+     if (!s->hit) {
+         /*
+@@ -1977,6 +1979,7 @@ int tls_parse_stoc_early_data(SSL *s, PACKET *pkt, unsigned int context,
+         return 0;
+     }
+ 
++    printf("tls stock early data!!!\n");
+     s->ext.early_data = SSL_EARLY_DATA_ACCEPTED;
+ 
+     return 1;
+@@ -2037,6 +2040,8 @@ int tls_parse_stoc_psk(SSL *s, PACKET *pkt, unsigned int context, X509 *x,
+     /* Early data is only allowed if we used the first ticket */
+     if (identity != 0)
+         s->ext.early_data_ok = 0;
++
++    printf("122) s->ext.early_data_ok = %d\n", s->ext.early_data_ok);
+ #endif
+ 
+     return 1;
+diff --git a/ssl/statem/extensions_srvr.c b/ssl/statem/extensions_srvr.c
+index 194b521877..cb70284359 100644
+--- a/ssl/statem/extensions_srvr.c
++++ b/ssl/statem/extensions_srvr.c
+@@ -165,8 +165,19 @@ int tls_parse_ctos_server_name(SSL *s, PACKET *pkt, unsigned int context,
+             && PACKET_equal(&hostname, s->session->ext.hostname,
+                             strlen(s->session->ext.hostname));
+ 
+-        if (!s->servername_done && s->session->ext.hostname != NULL)
++        if (!s->servername_done && s->session->ext.hostname != NULL) {
++	    printf("in here!!!!!\n");
+             s->ext.early_data_ok = 0;
++	} else {
++	    printf("not in there\n");
++	}
++	
++	printf("hostname = %s\n", hostname);
++	printf("s->session->ext.hostname = %s\n", s->session->ext.hostname);
++	printf("s->servername_done = %d\n", !s->servername_done);
++	printf("s->session->ext.hostname= %d\n", !s->session->ext.hostname != NULL);
++
++	printf("3 sni) s->ext.early_data_ok = %d;\n", s->ext.early_data_ok);
+     }
+ 
+     return 1;
+@@ -1053,6 +1064,8 @@ int tls_parse_ctos_psk(SSL *s, PACKET *pkt, unsigned int context, X509 *x,
+     unsigned int id, i, ext = 0;
+     const EVP_MD *md = NULL;
+ 
++    printf("hello world from tls_parse_ctos_psk\n");
++
+     /*
+      * If we have no PSK kex mode that we recognise then we can't resume so
+      * ignore this extension
+@@ -1163,6 +1176,8 @@ int tls_parse_ctos_psk(SSL *s, PACKET *pkt, unsigned int context, X509 *x,
+             ext = 1;
+             if (id == 0)
+                 s->ext.early_data_ok = 1;
++	    
++	    printf("1) s->ext.early_data_ok = %d\n", s->ext.early_data_ok);
+             s->ext.ticket_expected = 1;
+         } else {
+             uint32_t ticket_age = 0, now, agesec, agems;
+@@ -1207,11 +1222,16 @@ int tls_parse_ctos_psk(SSL *s, PACKET *pkt, unsigned int context, X509 *x,
+             }
+ 
+             ticket_age = (uint32_t)ticket_agel;
++	    printf("ticket age = %d\n", ticket_age);
+             now = (uint32_t)time(NULL);
+             agesec = now - (uint32_t)sess->time;
+             agems = agesec * (uint32_t)1000;
+             ticket_age -= sess->ext.tick_age_add;
+ 
++	    printf("ticket age add = %d\n", ticket_age);
++	    printf("agems + 1000 %d\n", agems + 1000);
++	    printf("sess->ext.ticket_age_add %d\n", sess->ext.tick_age_add);
++
+             /*
+              * For simplicity we do our age calculations in seconds. If the
+              * client does it in ms then it could appear that their ticket age
+@@ -1230,7 +1250,17 @@ int tls_parse_ctos_psk(SSL *s, PACKET *pkt, unsigned int context, X509 *x,
+                  * for early data
+                  */
+                 s->ext.early_data_ok = 1;
+-            }
++		printf("2) s->ext.early_data_ok = %d\n", s->ext.early_data_ok);
++            } else {
++		    printf("ticket age failed\n");
++		    printf("id => %d\nsess->timeout => %d\nagems / (uint_32_t)1000 == agesec => %d\n",
++				    id == 0,
++				    sess->timeout >= (long)agesec,
++				    agems / (uint32_t)1000 == agesec);
++		    printf("ticket_age <= agems + 1000 => %d\nticket age allowance => %d\n",
++				    ticket_age <= agems + 1000,
++				    ticket_age + TICKET_AGE_ALLOWANCE >= agems + 1000);
++	    }
+         }
+ 
+         md = ssl_md(sess->cipher->algorithm2);
+@@ -1240,6 +1270,8 @@ int tls_parse_ctos_psk(SSL *s, PACKET *pkt, unsigned int context, X509 *x,
+             sess = NULL;
+             s->ext.early_data_ok = 0;
+             s->ext.ticket_expected = 0;
++
++	    printf("4) s->ext.early_data_ok = %d;\n", s->ext.early_data_ok);
+             continue;
+         }
+         break;
 diff --git a/ssl/statem/statem_clnt.c b/ssl/statem/statem_clnt.c
 index 13610ba1b7..560e78cf51 100644
 --- a/ssl/statem/statem_clnt.c
@@ -142,10 +415,26 @@ index 13610ba1b7..560e78cf51 100644
          OPENSSL_free(exts);
          ssl_update_cache(s, SSL_SESS_CACHE_CLIENT);
 diff --git a/ssl/statem/statem_srvr.c b/ssl/statem/statem_srvr.c
-index 5f709e5f99..dfca65ea0d 100644
+index 5f709e5f99..e7247bf97d 100644
 --- a/ssl/statem/statem_srvr.c
 +++ b/ssl/statem/statem_srvr.c
-@@ -4095,6 +4095,13 @@ int tls_construct_new_session_ticket(SSL *s, WPACKET *pkt)
+@@ -2173,6 +2173,7 @@ int tls_handle_alpn(SSL *s)
+                                   selected_len) != 0) {
+                 /* Not consistent so can't be used for early_data */
+                 s->ext.early_data_ok = 0;
++		printf("111) s->ext.early_data_ok = %d\n", s->ext.early_data_ok);
+ 
+                 if (!s->hit) {
+                     /*
+@@ -2214,6 +2215,7 @@ int tls_handle_alpn(SSL *s)
+     if (s->session->ext.alpn_selected != NULL) {
+         /* Not consistent so can't be used for early_data */
+         s->ext.early_data_ok = 0;
++	printf("123) s->ext.early_data_ok = %d\n", s->ext.early_data_ok);
+     }
+ 
+     return 1;
+@@ -4095,6 +4097,13 @@ int tls_construct_new_session_ticket(SSL *s, WPACKET *pkt)
              /* SSLfatal() already called */
              goto err;
          }
@@ -160,7 +449,7 @@ index 5f709e5f99..dfca65ea0d 100644
  
          s->session->time = (long)time(NULL);
 diff --git a/ssl/tls13_enc.c b/ssl/tls13_enc.c
-index 266b7dfd21..037bae4b09 100644
+index 266b7dfd21..c02eb9ab9d 100644
 --- a/ssl/tls13_enc.c
 +++ b/ssl/tls13_enc.c
 @@ -168,6 +168,13 @@ int tls13_derive_finishedkey(SSL *s, const EVP_MD *md,
@@ -187,3 +476,182 @@ index 266b7dfd21..037bae4b09 100644
          prevsecret = preextractsec;
          prevsecretlen = mdlen;
      }
+@@ -407,6 +417,7 @@ static int derive_secret_key_and_iv(SSL *s, int sending, const EVP_MD *md,
+         goto err;
+     }
+ 
++
+     /* TODO(size_t): convert me */
+     keylen = EVP_CIPHER_key_length(ciph);
+     if (EVP_CIPHER_mode(ciph) == EVP_CIPH_CCM_MODE) {
+@@ -433,6 +444,14 @@ static int derive_secret_key_and_iv(SSL *s, int sending, const EVP_MD *md,
+         /* SSLfatal() already called */
+         goto err;
+     }
++	
++    printf("derive_key_and_iv\n");
++    printf("\tsecret: \t");
++    print_hex2(secret, hashlen);
++    printf("\tkey: \t");
++    print_hex2(key, keylen);
++    printf("\tiv: \t");
++    print_hex2(iv, ivlen);
+ 
+     if (EVP_CipherInit_ex(ciph_ctx, ciph, NULL, NULL, NULL, sending) <= 0
+         || !EVP_CIPHER_CTX_ctrl(ciph_ctx, EVP_CTRL_AEAD_SET_IVLEN, ivlen, NULL)
+@@ -487,6 +506,7 @@ int tls13_change_cipher_state(SSL *s, int which)
+     const EVP_CIPHER *cipher = NULL;
+ 
+     if (which & SSL3_CC_READ) {
++	printf("here10\n");
+         if (s->enc_read_ctx != NULL) {
+             EVP_CIPHER_CTX_reset(s->enc_read_ctx);
+         } else {
+@@ -502,6 +522,7 @@ int tls13_change_cipher_state(SSL *s, int which)
+ 
+         RECORD_LAYER_reset_read_sequence(&s->rlayer);
+     } else {
++	printf("here11\n");
+         s->statem.enc_write_state = ENC_WRITE_STATE_INVALID;
+         if (s->enc_write_ctx != NULL) {
+             EVP_CIPHER_CTX_reset(s->enc_write_ctx);
+@@ -522,6 +543,7 @@ int tls13_change_cipher_state(SSL *s, int which)
+     if (((which & SSL3_CC_CLIENT) && (which & SSL3_CC_WRITE))
+             || ((which & SSL3_CC_SERVER) && (which & SSL3_CC_READ))) {
+         if (which & SSL3_CC_EARLY) {
++	    printf("here9\n");
+             EVP_MD_CTX *mdctx = NULL;
+             long handlen;
+             void *hdata;
+@@ -530,10 +552,13 @@ int tls13_change_cipher_state(SSL *s, int which)
+ 
+             insecret = s->early_secret;
+             label = client_early_traffic;
++	    printf("here9: %s\n", label);
+             labellen = sizeof(client_early_traffic) - 1;
+             log_label = CLIENT_EARLY_LABEL;
+ 
+             handlen = BIO_get_mem_data(s->s3.handshake_buffer, &hdata);
++	    printf("hdata: ");
++	    print_hex2(hdata, handlen);
+             if (handlen <= 0) {
+                 SSLfatal(s, SSL_AD_INTERNAL_ERROR,
+                          SSL_F_TLS13_CHANGE_CIPHER_STATE,
+@@ -557,6 +582,7 @@ int tls13_change_cipher_state(SSL *s, int which)
+                              ERR_R_INTERNAL_ERROR);
+                     goto err;
+                 }
++		printf("s->early_data_state\n");
+                 sslcipher = SSL_SESSION_get0_cipher(s->psksession);
+             }
+             if (sslcipher == NULL) {
+@@ -586,6 +612,10 @@ int tls13_change_cipher_state(SSL *s, int which)
+                 EVP_MD_CTX_free(mdctx);
+                 goto err;
+             }
++	    printf("finalhash data: ");
++	    print_hex2(hdata, handlen);
++	    printf("finalhash: ");
++	    print_hex2(hashval, hashlenui);
+             hashlen = hashlenui;
+             EVP_MD_CTX_free(mdctx);
+ 
+@@ -600,6 +630,9 @@ int tls13_change_cipher_state(SSL *s, int which)
+                 goto err;
+             }
+ 
++	    printf("s->early_exporter_master_secret: ");
++	    print_hex2(s->early_exporter_master_secret, hashlen);
++
+             if (!ssl_log_secret(s, EARLY_EXPORTER_SECRET_LABEL,
+                                 s->early_exporter_master_secret, hashlen)) {
+                 /* SSLfatal() already called */
+@@ -621,6 +654,7 @@ int tls13_change_cipher_state(SSL *s, int which)
+              * hashes have moved on. Therefore we use the value saved earlier
+              * when we did the server write/client read change cipher state.
+              */
++	    printf("hash = s->handshake_traffic_hash;\n");
+             hash = s->handshake_traffic_hash;
+         } else {
+             insecret = s->master_secret;
+@@ -633,10 +667,12 @@ int tls13_change_cipher_state(SSL *s, int which)
+              * what ssl_handshake_hash() would give us. Instead we use the
+              * previously saved value.
+              */
++            printf("hash = s->server_finished_hash;\n");
+             hash = s->server_finished_hash;
+         }
+     } else {
+         /* Early data never applies to client-read/server-write */
++	printf("here7\n");
+         if (which & SSL3_CC_HANDSHAKE) {
+             insecret = s->handshake_secret;
+             finsecret = s->server_finished_secret;
+@@ -644,11 +680,13 @@ int tls13_change_cipher_state(SSL *s, int which)
+             label = server_handshake_traffic;
+             labellen = sizeof(server_handshake_traffic) - 1;
+             log_label = SERVER_HANDSHAKE_LABEL;
++	    printf("here6\n");
+         } else {
+             insecret = s->master_secret;
+             label = server_application_traffic;
+             labellen = sizeof(server_application_traffic) - 1;
+             log_label = SERVER_APPLICATION_LABEL;
++	    printf("here5\n");
+         }
+     }
+ 
+@@ -660,17 +698,22 @@ int tls13_change_cipher_state(SSL *s, int which)
+             /* SSLfatal() already called */;
+             goto err;
+         }
++	printf("hash was in here 1\n");
+     }
+ 
+     /*
+      * Save the hash of handshakes up to now for use when we calculate the
+      * client application traffic secret
+      */
+-    if (label == server_application_traffic)
++    if (label == server_application_traffic) {
++	printf("here4\n");
+         memcpy(s->server_finished_hash, hashval, hashlen);
++    }
+ 
+-    if (label == server_handshake_traffic)
++    if (label == server_handshake_traffic) {
++	printf("here3\n");
+         memcpy(s->handshake_traffic_hash, hashval, hashlen);
++    }
+ 
+     if (label == client_application_traffic) {
+         /*
+@@ -685,8 +728,10 @@ int tls13_change_cipher_state(SSL *s, int which)
+             /* SSLfatal() already called */
+             goto err;
+         }
++	printf("here2\n");
+     }
+ 
++    printf("here1\n");
+     if (!derive_secret_key_and_iv(s, which & SSL3_CC_WRITE, md, cipher,
+                                   insecret, hash, label, labellen, secret, iv,
+                                   ciph_ctx)) {
+@@ -694,6 +739,17 @@ int tls13_change_cipher_state(SSL *s, int which)
+         goto err;
+     }
+ 
++    printf("derive_secret_key_and_iv: \n");
++    printf("\thash: \t");
++    print_hex2(hash, 32);
++    printf("\tinsecret: \t");
++    print_hex2(insecret, hashlen);
++    printf("\tlabel: %s\n", label);
++    printf("\tiv: \t");
++    print_hex2(iv, hashlen);
++    printf("\tsecret: \t");
++    print_hex2(secret, hashlen);
++
+     if (label == server_application_traffic) {
+         memcpy(s->server_app_traffic_secret, secret, hashlen);
+         /* Now we create the exporter master secret */
