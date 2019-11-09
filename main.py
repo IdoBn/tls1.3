@@ -1,4 +1,5 @@
 from tls13.tls13_session import TLS13Session
+from time import sleep
 
 
 def main():
@@ -19,7 +20,7 @@ def main():
     print(res.decode())
     sess.close()
     # print(sess.session_tickets)
-
+    sleep(0.5)
     sess.resume()
 
 

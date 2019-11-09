@@ -70,6 +70,29 @@ class HandshakeKeys:
 class ResumptionKeys:
     binder_key: bytes
     early_secret: bytes
+    client_early_traffic_secret: bytes
+
+    @property
+    def client_early_key(self):
+        return HKDF_Expand_Label(
+            key=self.client_early_traffic_secret,
+            algorithm=hashes.SHA256(),
+            length=32,
+            label="key",
+            context=b"",
+            backend=default_backend(),
+        )
+
+    @property
+    def client_early_iv(self):
+        return HKDF_Expand_Label(
+            key=self.client_early_traffic_secret,
+            algorithm=hashes.SHA256(),
+            length=32,
+            label="iv",
+            context=b"",
+            backend=default_backend(),
+        )
 
 
 @dataclass
@@ -135,6 +158,7 @@ class KeyPair:
         return ResumptionKeys(
             binder_key=binder_key,
             early_secret=early_secret,
+            client_early_traffic_secret=client_early_traffic_secret,
         )
 
 

@@ -9,7 +9,7 @@ data = s.recv(4096)
 s.close()
 """
 from socket import socket, timeout
-from tls13.client_hello import ClientHello, ExtensionKeyShare, ExtensionPreSharedKey, ExtensionEarlyData
+from tls13.client_hello import ClientHello, ExtensionKeyShare, ExtensionPreSharedKey, ExtensionEarlyData, ExtensionServerName
 from tls13.server_hello import ServerHello, RecordHeader
 from tls13.handshake_headers import (
     HandshakeHeader,
@@ -107,6 +107,7 @@ class TLS13Session:
             binders=psk_binders)
 
         ch = ClientHello(self.host, self.key_pair.public)
+        # ch.extensions = [ex for ex in ch.extensions if type(ex) is not ExtensionServerName]
         ch.add_extension(ExtensionEarlyData())
         ch.add_extension(pre_share_key_ext)
 
@@ -137,6 +138,7 @@ class TLS13Session:
             binders=psk_binders)
 
         ch.extensions = [ex for ex in ch.extensions if type(ex) is not ExtensionPreSharedKey]
+        # ch.extensions = [ex for ex in ch.extensions if type(ex) is not ExtensionServerName]
         ch.add_extension(pre_share_key_ext)
 
         ch_bytes_final = ch.serialize()
@@ -144,7 +146,26 @@ class TLS13Session:
 
         self.socket = socket()
         self.socket.connect((self.host, self.port))
-        self.socket.send(ch_bytes_final)
+    
+
+        data = f"GET /testing HTTP/1.1\r\nHost: {self.host.decode()}\r\nUser-Agent: curl/7.54.0\r\nAccept: */*\r\n\r\n".encode()
+        send_data = data + b"\x17"
+        record_header = RecordHeader(rtype=0x17, size=len(send_data) + 16)
+        encryptor = AES.new(
+            self.resumption_keys.client_early_key,
+            AES.MODE_GCM,
+            xor_iv(self.resumption_keys.client_early_iv, 0),
+        )
+        encryptor.update(record_header.serialize())
+        ciphertext_payload = encryptor.encrypt(send_data)
+        tag = encryptor.digest()
+
+        w = Wrapper(record_header=record_header, payload=ciphertext_payload + tag)
+        self.socket.send(ch_bytes_final + bytes.fromhex("140303000101") + w.serialize())
+        
+
+
+        print("res", self.socket.recv(4096))
         print("res", self.socket.recv(4096))
 
 

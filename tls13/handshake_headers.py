@@ -118,7 +118,9 @@ class NewSessionTicketHandshakePayload(HandshakePayload):
     @property
     def obfuscated_ticket_age(self):
         # see https://tools.ietf.org/html/rfc8446#section-4.2.11.1 for explanation
-        return ((self.ticket_lifetime_seconds * 1000) + self.ticket_age_add) % (2 ** 32)
+        print("ticket lifetime", self.ticket_lifetime_seconds // 1000)
+        print("ticket add", self.ticket_age_add)
+        return ((self.ticket_lifetime_seconds // 1000) + self.ticket_age_add) % (2 ** 32)
 
     def psk(self, resumption_master_secret: bytes):
         tmp_psk = HKDF_Expand_Label(
