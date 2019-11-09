@@ -131,7 +131,10 @@ class TLS13Session:
         
         print("psk_binders", hexlify(psk_binders))
 
-        self.resumption_keys = self.key_pair.derive_early_keys(session_ticket.psk(resumption_master_secret), my_hello_hash)
+        
+        final_hash = hashlib.sha256(ch_bytes[5:]).digest()
+        print("final_hash", hexlify(final_hash))
+        self.resumption_keys = self.key_pair.derive_early_keys(session_ticket.psk(resumption_master_secret), final_hash)
         pre_share_key_ext = ExtensionPreSharedKey(
             identity=session_ticket.session_ticket, 
             obfuscated_ticket_age=session_ticket.obfuscated_ticket_age, 
@@ -144,6 +147,10 @@ class TLS13Session:
         ch_bytes_final = ch.serialize()
         # print(len(ch_bytes_final), ch_bytes_final)
 
+        final_hash = hashlib.sha256(ch_bytes_final[5:]).digest()
+        print("final_hash", hexlify(final_hash))
+        self.resumption_keys = self.key_pair.derive_early_keys(session_ticket.psk(resumption_master_secret), final_hash)
+
         self.socket = socket()
         self.socket.connect((self.host, self.port))
     
@@ -151,6 +158,9 @@ class TLS13Session:
         data = f"GET /testing HTTP/1.1\r\nHost: {self.host.decode()}\r\nUser-Agent: curl/7.54.0\r\nAccept: */*\r\n\r\n".encode()
         send_data = data + b"\x17"
         record_header = RecordHeader(rtype=0x17, size=len(send_data) + 16)
+        print("client_early_traffic_secret", hexlify(self.resumption_keys.client_early_traffic_secret))
+        print("client_early_key", hexlify(self.resumption_keys.client_early_key))
+        print("client_early_iv", hexlify(self.resumption_keys.client_early_iv))
         encryptor = AES.new(
             self.resumption_keys.client_early_key,
             AES.MODE_GCM,

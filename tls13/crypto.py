@@ -77,7 +77,7 @@ class ResumptionKeys:
         return HKDF_Expand_Label(
             key=self.client_early_traffic_secret,
             algorithm=hashes.SHA256(),
-            length=32,
+            length=16,
             label="key",
             context=b"",
             backend=default_backend(),
@@ -88,7 +88,7 @@ class ResumptionKeys:
         return HKDF_Expand_Label(
             key=self.client_early_traffic_secret,
             algorithm=hashes.SHA256(),
-            length=32,
+            length=12,
             label="iv",
             context=b"",
             backend=default_backend(),
@@ -139,6 +139,15 @@ class KeyPair:
             backend=backend,
         )
         print("binder_key", hexlify(binder_key))
+        print("early_secret", hexlify(early_secret))
+        client_early_traffic_secret = HKDF_Expand_Label(
+            key=early_secret,
+            algorithm=hashes.SHA256(),
+            length=32,
+            label="c e traffic",
+            context=client_hello_hash,
+            backend=backend,
+        )
         client_early_traffic_secret = HKDF_Expand_Label(
             key=early_secret,
             algorithm=hashes.SHA256(),
