@@ -9,7 +9,7 @@ def main():
     # port = 443
 
     host = b"host.docker.internal"
-    port = 4433
+    port = 4432
 
     sess = TLS13Session(host, port)
     sess.connect()
@@ -20,7 +20,7 @@ def main():
     print(res.decode())
     sess.close()
     # print(sess.session_tickets)
-    sleep(0.5)
+    # sleep(0.5)
     sess.resume()
 
 

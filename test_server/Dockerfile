@@ -12,4 +12,11 @@ RUN openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
 
 COPY ./default.conf /etc/nginx/conf.d/default.conf
 
-CMD ["nginx", "-g", "daemon off;"]
+RUN apt install -y python3.7 procps python3-pip
+
+RUN python3.7 -m pip install flask
+
+COPY ./app.py /
+COPY ./start.sh /
+
+CMD ["bash", "/start.sh"]

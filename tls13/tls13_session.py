@@ -155,7 +155,7 @@ class TLS13Session:
         self.socket.connect((self.host, self.port))
     
 
-        data = f"GET /testing HTTP/1.1\r\nHost: {self.host.decode()}\r\nUser-Agent: curl/7.54.0\r\nAccept: */*\r\n\r\n".encode()
+        data = f"HEAD /img.jpg HTTP/1.1\r\nHost: {self.host.decode()}\r\nUser-Agent: curl/7.54.0\r\nAccept: */*\r\n\r\n".encode()
         send_data = data + b"\x17"
         record_header = RecordHeader(rtype=0x17, size=len(send_data) + 16)
         print("client_early_traffic_secret", hexlify(self.resumption_keys.client_early_traffic_secret))
